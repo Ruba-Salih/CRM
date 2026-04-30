@@ -88,5 +88,9 @@ The AI should not move a ticket to SOLD automatically just because the user says
  It should probably flag it for an admin or wait for a payment confirmation from your system
  
 
- Course Data Sync
+-Course Data Sync
 The Issue: If you add a new Python course in the courses table, how does the AI know about it?
+
+- the massage accounts
+
+deepseek ocr
