@@ -1,0 +1,112 @@
+[
+  {
+    "scenario": "1a. دورة مبيعات أونلاين (شخصي) - دورة غير موجودة في الكاتالوج",
+    "expected_ticket_type": "NEW_COURSE_REQUEST_PERSONAL_ONLINE_COURSES",
+    "description": "التسويق الرقمي غير موجود في جدول courses → NEW_COURSE_REQUEST. يُرد بأن الدورة غير متوفرة ويُعرض عرض البدائل.",
+    "postman_payload": {
+      "platform": "facebook",
+      "platform_user_id": "fb_sale_001",
+      "text": "أريد التسجيل في دورة التسويق الرقمي القادمة أونلاين، ما هي الخطوات وسعر الدورة؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "1b. دورة بايثون أونلاين (شخصي) - دورة موجودة وتعمل",
+    "expected_ticket_type": "PERSONAL_ONLINE_COURSES",
+    "description": "بايثون موجود في courses وله running_courses نشط → تُحتفظ بالكود الأساسي. يُرد بتفاصيل الدورة الكاملة.",
+    "postman_payload": {
+      "platform": "facebook",
+      "platform_user_id": "fb_python_001",
+      "text": "أخبرني عن دورة البايثون أكثر؟ ما هو السعر والمحاور؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "2. دورة حضورية (شخصي) - دورة غير موجودة في الكاتالوج",
+    "expected_ticket_type": "NEW_COURSE_REQUEST_PERSONAL_OFFLINE_COURSES",
+    "description": "المحاسبة المالية غير موجودة في الكاتالوج → NEW_COURSE_REQUEST_PERSONAL_OFFLINE_COURSES. يُرد بأنها غير متوفرة.",
+    "postman_payload": {
+      "platform": "facebook",
+      "platform_user_id": "fb_offline_001",
+      "text": "متى تبدأ دورة المحاسبة المالية حضورياً في المركز؟ هل يوجد مقاعد متاحة؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "3. مبيعات للشركات أونلاين - دورة غير موجودة في الكاتالوج",
+    "expected_ticket_type": "NEW_COURSE_REQUEST_CORPORATION_ONLINE_COURSES",
+    "description": "دورة المبيعات غير موجودة في الكاتالوج → NEW_COURSE_REQUEST_CORPORATION_ONLINE_COURSES.",
+    "postman_payload": {
+      "platform": "whatsapp",
+      "platform_user_id": "wa_corp_001",
+      "text": "نحن شركة ونريد حجز مقاعد لـ 10 موظفين في دورة المبيعات أونلاين، هل تقدمون عروضاً للشركات؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "4. دعم فني",
+    "expected_ticket_type": "TECHNICAL_SUPPORT",
+    "description": "يجب فتح تذكرة دعم فني (Technical Support) وبدء مؤقت الدعم لحل المشكلة بسرعة.",
+    "postman_payload": {
+      "platform": "instagram",
+      "platform_user_id": "ig_tech_001",
+      "text": "لا أستطيع الدخول إلى حسابي في المنصة، تظهر لي رسالة خطأ عند كتابة كلمة المرور، أرجو المساعدة فوراً.",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "5. شكوى قوية",
+    "expected_ticket_type": "COMPLAINT",
+    "description": "يجب فتح تذكرة شكوى (Complaint) وتقييم العميل على أنه غاضب وتسجيل التذكرة كأولوية قصوى.",
+    "postman_payload": {
+      "platform": "facebook",
+      "platform_user_id": "fb_comp_001",
+      "text": "المدرب لم يحضر اليوم وتأخرنا نصف ساعة! هذا غير احترافي وسيء للغاية، أريد استرداد أموالي وتقديم شكوى رسمية!",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "6a. طلب دورة غير موجودة في الكاتالوج (NEW_COURSE_REQUEST)",
+    "expected_ticket_type": "NEW_COURSE_REQUEST_PERSONAL_ONLINE_COURSES",
+    "description": "الذكاء الاصطناعي وتطوير تطبيقات الموبايل غير موجودين في جدول courses → NEW_COURSE_REQUEST. يُسجَّل الطلب بدون مؤقت زمني.",
+    "postman_payload": {
+      "platform": "whatsapp",
+      "platform_user_id": "wa_req_001",
+      "text": "هل تقدمون دورات متقدمة في الذكاء الاصطناعي وتطوير تطبيقات الموبايل؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "6b. طلب دورة موجودة في الكاتالوج لكن لا يوجد جدول حالي (OUT_OF_PLAN)",
+    "expected_ticket_type": "OUT_OF_PLAN_PERSONAL_ONLINE_COURSES",
+    "description": "دورة الأمن السيبراني موجودة في courses لكن لا يوجد running_courses نشط لها → OUT_OF_PLAN_PERSONAL_ONLINE_COURSES.",
+    "postman_payload": {
+      "platform": "whatsapp",
+      "platform_user_id": "wa_req_002",
+      "text": "هل تقدمون دورة في الأمن السيبراني أونلاين؟ أريد التسجيل.",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "7. استفسار عام",
+    "expected_ticket_type": "GENERAL_ENQUIRY",
+    "description": "لا يتم فتح تذكرة، بل يُسجل كاستفسار عام ويقوم الذكاء الاصطناعي بالرد المباشر بتهذيب.",
+    "postman_payload": {
+      "platform": "facebook",
+      "platform_user_id": "fb_gen_001",
+      "text": "السلام عليكم، متى مواعيد العمل الرسمية في المركز؟ ومتى تفتحون يوم السبت؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "8. استفسار متابعة - ماذا متاح",
+    "expected_ticket_type": "GENERAL_ENQUIRY",
+    "description": "رسالة متابعة قصيرة بعد رفض الدورة الأولى. يجب أن يرد الذكاء الاصطناعي بقائمة الدورات المتاحة من قاعدة البيانات.",
+    "postman_payload": {
+      "platform": "facebook",
+      "platform_user_id": "fb_sale_001",
+      "text": "نعم ماذا متاح؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  }
+]

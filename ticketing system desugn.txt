@@ -1,0 +1,92 @@
+requee
+source: comment: 0 - 30,message20 - 50,call 60
+sessionId
+router_value
+chatInput
+
+course_info {attendance_type, program_type,name,}
+
+let platform
+if(source=='messenger' || source=='facebook_comments')
+   let platform = 'facebook'
+else if()
+
+// tickets count
+SELECT count(*) as total from crm_tickets where closed = 0 and crm_lead_id = (SELECT lp.crm_lead_id from crm_lead_social_profiles lp where lp.platform_user_id=${sessionId} and lp.platform=${platform})
+
+
+5. Cases to handle received messages:
+   0. GREETING / GENERAL INFO -> NO TICKET. (Respond only via AI knowledge base).
+   1. ACTIONABLE INTENT + NO TICKET -> Open new Ticket (Assign Level: PRE_SALE for sales).
+   2. PRE-TICKET STATE -> Message recognized but missing data (e.g. course name). Prompt user before opening.
+   3. ACTIONABLE INTENT + EXISTING TICKET -> Add message to thread and update score.
+   
+   * Platform Handling (Simplified): 
+     - No central platforms table needed.
+     - Use descriptive strings in `platform` column: 'facebook_post', 'facebook_message', 'whatsapp', 'pstn', 'sms', 'instagram'.
+     - Interaction Types: 'message', 'comment', 'reaction', 'call'.
+   
+   * Reaction Logic:
+     - Logged as `interaction_type = 'reaction'`.
+     - `message_text` stores description: "[REACTION: LOVE] on post X".
+     - Scoring: Use map from scoring.txt (Heart = +10, etc.).
+   
+   * PSTN/SMS/Call Logic:
+     - Logged as `platform = 'pstn'` or `'sms'`.
+     - `external_id` links to `crm_logs.id`.
+     - Calls give high score (+50).
+
+3 - 6 has timers (should be restarted when server restart)
+  1- Pre-sale Follow up
+      if the timer run for the second time and finds that no answer from the client for the previous message then do not generate answer and also close the ticket.
+    if not, respond and update last_timer_time
+  2- POST_SALE_FOLLOW_UP courses follow-up starts after the course get stared
+  3- Technical Support Follow up
+  4- 
+
+
+
+عنوان التذكرة في حالة المبيعات عبارة عن معالجة نصوص {كورس البايثون اونلاين} وفي حالة الشكوى والدعم الفنى يخرج من الذكاء الاصطناعي
+
+
+مراحل البيع
+قبل البيع, تم البيع, متابعة ما بعد البيع, اكتمال الخدمة كاملة,تم التقييم
+
+تستحق تذكرة(router_value: COMPLAINT,TECHNICAL_SUPPORT,DEEP_INFO_PERSONAL,DEEP_INFO_CORPORATION,)
+تستحق الاضافة الى تذكرة وتزيد الاسكور (LOCATION_DESCRIPTION, CENTER_INFO, ONLINE_PLATFORM_INFO)
+
+ قد تستحق تذكرة (OUT_OF_PLAN_COURSES, NEW_COURSES_WORKSHOPS_REQUESTS)
+
+اذا ما كان عنده تذكرة مفتوحة وكانت الرسالة تستحق تذكرة مبيعات
+فتح تذكرة مبيعات
+
+اذا ما كان عنده تذكرة مفتوحة وكانت الرسالة تستحق تذكرة دعم فني او شكوى
+فتح تذكرة دعم فني او شكوى
+اذا كانت في تذكرة 
+
+
+
+
+--------------------------
+نسال عن رقم الواتس في مرحة الPre-Sale  عندمه يصبح مجموع الاسكور Hot Lead
+ اذا ارسل الرقم نعطيه رابط ارسال راسلة مباشرة لنا
+
+
+
+
+do refactor
+
+
+
+Reply enhanced by the ticketing system
+Timers to track to the opened ticket
+
+Duplicate Profile: User was talking on Facebook and now messages on WhatsApp.
+Handling: The system should check if the phone number/email matches an existing Lead and merge the message into the existing ticket thread if possible.
+
+The AI should not move a ticket to SOLD automatically just because the user says they paid.
+ It should probably flag it for an admin or wait for a payment confirmation from your system
+ 
+
+ Course Data Sync
+The Issue: If you add a new Python course in the courses table, how does the AI know about it?

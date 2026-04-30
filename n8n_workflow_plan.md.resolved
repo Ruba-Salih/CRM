@@ -1,0 +1,659 @@
+# 🗺️ خطة n8n التفصيلية الكاملة — CRM أفروتك
+
+## ما تم بناؤه (الموجود حالياً في Workflow)
+
+| الـ Node | الوظيفة | الحالة |
+|---|---|---|
+| `Webhook1` (path: `messenger`) | استقبال رسائل فيسبوك | ✅ موجود |
+| `Smart Router Input1` | تجميع بيانات الرسالة (sessionId, chatInput) | ✅ موجود |
+| `AI Agent4` (qwen3-32b) | تصنيف الرسالة → GENERAL_INFO, DEEP_INFO.. إلخ | ✅ موجود |
+| `Switch6` | توجيه الرد حسب التصنيف (11 فرع) | ✅ موجود |
+| `Execute a SQL query19` | جلب كورسات ورشات نشطة للـ GENERAL_INFO | ✅ موجود |
+| `Pre Deep Info1` | قائمة برامج للـ DEEP_INFO لاختيار منها | ✅ موجود |
+| `Deep Course Info1` | تفاصيل كورس محدد | ✅ موجود |
+| `Code in JavaScript 26-28` | Prompts للمنصة الأونلاين، الموقع، الدعم الفني | ✅ موجود |
+| `AI Agent5` | رد على الـ DEEP_INFO | ✅ موجود |
+| `HTTP Request16` | إرسال الرد عبر Messenger API | ✅ موجود |
+
+## ما لم يُبنَ بعد (الخطوات المطلوبة)
+
+> [!IMPORTANT]
+> 3 SQL statements يجب تنفيذها أولاً في قاعدة البيانات قبل البدء في n8n
+
+---
+
+## خطوة 0 — تنفيذ SQL في قاعدة البيانات أولاً
+
+```sql
+-- 1. إضافة حقول crm_tickets
+ALTER TABLE crm_tickets
+  ADD COLUMN sales_level_id       int(11) DEFAULT NULL,
+  ADD COLUMN running_program_id   int(11) DEFAULT NULL,
+  ADD COLUMN running_program_type enum('Course','Workshop') DEFAULT NULL;
+
+-- 2. إصلاح crm_ticket_messages
+ALTER TABLE crm_ticket_messages
+  MODIFY facebook_comment_id  int(11) DEFAULT NULL,
+  MODIFY facebook_message_id  int(11) DEFAULT NULL,
+  MODIFY instagram_message_id int(11) DEFAULT NULL,
+  MODIFY instagram_comment_id int(11) DEFAULT NULL,
+  MODIFY tiktok_comment_id    int(11) DEFAULT NULL,
+  MODIFY tiktok_message_id    int(11) DEFAULT NULL,
+  MODIFY whatsapp_message_id  int(11) DEFAULT NULL,
+  MODIFY telegram_message_id  int(11) DEFAULT NULL,
+  MODIFY linkedin_comment_id  int(11) DEFAULT NULL,
+  MODIFY linkedin_message_id  int(11) DEFAULT NULL,
+  MODIFY `pstn_call _id`      int(11) DEFAULT NULL,
+  MODIFY pstn_sms_id          int(11) DEFAULT NULL,
+  MODIFY topic_chat_id        int(11) DEFAULT NULL,
+  ADD COLUMN router_value varchar(50) DEFAULT NULL,
+  ADD COLUMN message_text  text        DEFAULT NULL,
+  ADD COLUMN sender_type   enum('customer','bot','human') DEFAULT 'customer';
+
+-- 3. ربط Lead بالمستخدم
+ALTER TABLE crm_leads ADD COLUMN user_id_fk int(11) DEFAULT NULL;
+
+-- 4. إضافة إعدادات Timer
+INSERT INTO atc_config (title, value, comment) VALUES
+  ('crm_pre_sale_timer_minutes',  '1435', '23h55m للمبيعات'),
+  ('crm_complaint_timer_minutes', '240',  '4h للشكاوى'),
+  ('crm_technical_timer_minutes', '240',  '4h للدعم الفني'),
+  ('crm_followup_timer_minutes',  '1435', '23h55m المتابعة التالية');
+
+-- 5. جدول Timers
+CREATE TABLE IF NOT EXISTS crm_ticket_timers (
+  id            int(11) NOT NULL AUTO_INCREMENT,
+  crm_ticket_id int(11) NOT NULL,
+  timer_type    enum('PRE_SALE_FOLLOWUP','POST_SALE_FOLLOWUP',
+                     'TECHNICAL_SUPPORT_FOLLOWUP','COMPLAINT_FOLLOWUP') NOT NULL,
+  sequence_no   tinyint(3) DEFAULT 1,
+  scheduled_at  timestamp NOT NULL,
+  executed_at   timestamp NULL DEFAULT NULL,
+  status        enum('pending','executed','cancelled','skipped') DEFAULT 'pending',
+  created       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_due    (scheduled_at, status),
+  KEY idx_ticket (crm_ticket_id),
+  CONSTRAINT fk_timer_ticket FOREIGN KEY (crm_ticket_id)
+    REFERENCES crm_tickets(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+---
+
+## Workflow 1 — تعديل الـ Messenger Workflow الحالي
+
+### أين تُضاف الـ Nodes الجديدة؟
+**بعد** `Smart Router Input1` مباشرةً، **قبل** `AI Agent4`.
+
+```
+[Smart Router Input1]
+       ↓
+[★ NODE 1: Get Timer Config]   ← MySQL
+       ↓
+[★ NODE 2: Get Lead]           ← MySQL
+       ↓
+[★ NODE 3: Get Open Tickets]   ← MySQL
+       ↓
+[AI Agent4]  (موجود - بدون تغيير)
+       ↓
+[Switch6]    (موجود - بدون تغيير)
+       ↓
+ ┌─[GENERAL_INFO]──────────────────── بدون تغيير ──────────────────────┐
+ ├─[DEEP_INFO_PERSONAL / CORPORATION]                                   │
+ │      ↓                                                               │
+ │  [★ NODE 4: Ticket Manager]  ← Code Node                            │
+ │      ↓                                                               │
+ │  [★ NODE 5: Execute Ticket SQL] ← MySQL                             │
+ │      ↓                                                               │
+ │  [★ NODE 6: Save Timer] ← MySQL                                     │
+ │      ↓                                                               │
+ │  [Deep Course Info1] (موجود - بدون تغيير)                           │
+ ├─[TECHNICAL_SUPPORT]                                                  │
+ │      ↓                                                               │
+ │  [★ NODE 4: Ticket Manager] ← Code Node                             │
+ │      ↓ (نفس 5 و 6)                                                  │
+ │  [Code in JavaScript28] (موجود)                                     │
+ ├─[COMPLAINT]                                                          │
+ │      ↓                                                               │
+ │  [★ NODE 4: Ticket Manager] ← Code Node                             │
+ │      ↓ (نفس 5 و 6)                                                  │
+ │  [رد عام]                                                            │
+ └──────────────────────────────────────────────────────────────────────┘
+       ↓
+[HTTP Request16] (موجود - بدون تغيير)
+```
+
+---
+
+### ★ NODE 1: Get Timer Config — MySQL Node
+
+**النوع:** `MySQL → Execute Query`
+
+```sql
+SELECT title, value FROM atc_config WHERE title LIKE 'crm_%timer%'
+```
+
+بعده أضف **Code Node** لتحويل النتائج إلى متغيرات:
+
+```javascript
+// Code Node: "Parse Timer Config"
+const items = $input.all();
+const config = {};
+items.forEach(item => {
+  config[item.json.title] = parseInt(item.json.value);
+});
+
+// نمرر config مع بيانات الرسالة الأصلية
+const input = $items("Smart Router Input1")[0].json;
+return [{ json: { ...input, timerConfig: config } }];
+```
+
+---
+
+### ★ NODE 2: Get Lead — MySQL Node
+
+**النوع:** `MySQL → Execute Query`
+
+```sql
+SELECT 
+  l.id as lead_id,
+  l.user_id_fk,
+  l.last_interaction_time,
+  lsp.platform_user_id,
+  lsp.display_name,
+  lsp.gender
+FROM crm_leads l
+JOIN crm_lead_social_profiles lsp ON l.id = lsp.crm_lead_id
+WHERE lsp.platform = 'facebook'
+  AND lsp.platform_user_id = '{{ $("Smart Router Input1").first().json.sessionId }}'
+LIMIT 1
+```
+
+بعده أضف **Code Node** للتعامل مع حالة عدم وجود Lead:
+
+```javascript
+// Code Node: "Handle Lead"
+const input = $items("Parse Timer Config")[0].json;
+const leads = $input.all();
+
+let lead_id = null;
+let user_id_fk = null;
+let last_interaction_time = null;
+
+if (leads.length > 0 && leads[0].json.lead_id) {
+  lead_id = leads[0].json.lead_id;
+  user_id_fk = leads[0].json.user_id_fk;
+  last_interaction_time = leads[0].json.last_interaction_time;
+} else {
+  // Lead جديد — سنُنشئه في Ticket Manager
+}
+
+return [{ json: {
+  ...input,
+  lead_id,
+  user_id_fk,
+  last_interaction_time
+}}];
+```
+
+---
+
+### ★ NODE 3: Get Open Tickets — MySQL Node
+
+**النوع:** `MySQL → Execute Query`
+
+```sql
+SELECT 
+  t.id as ticket_id,
+  t.crm_ticket_type_id,
+  t.sales_level_id,
+  t.running_program_id,
+  t.running_program_type,
+  t.last_timer_time,
+  tt.code as ticket_type_code,
+  sl.code as sales_level_code
+FROM crm_tickets t
+JOIN crm_ticket_types tt ON t.crm_ticket_type_id = tt.id
+LEFT JOIN crm_sales_ticket_levels sl ON t.sales_level_id = sl.id
+WHERE t.crm_lead_id = {{ $json.lead_id || 0 }}
+  AND t.closed = 0
+ORDER BY t.created DESC
+```
+
+بعده **Code Node** لتجميع كل بيانات السياق:
+
+```javascript
+// Code Node: "Build Context"
+const input = $items("Handle Lead")[0].json;
+const tickets = $input.all().map(t => t.json);
+
+return [{ json: {
+  ...input,
+  openTickets: tickets
+}}];
+```
+
+---
+
+### ★ NODE 4: Ticket Manager — Code Node الرئيسي
+
+هذا هو "عقل" النظام. يُوضع بعد **كل فرع** يحتاج تذكرة (DEEP_INFO, TECHNICAL, COMPLAINT).
+
+```javascript
+// Code Node: "Ticket Manager"
+// يعمل بعد Switch6 في فروع: DEEP_INFO_*, TECHNICAL_SUPPORT, COMPLAINT
+
+const ctx = $items("Build Context")[0].json;
+const routerValue = ctx.output ? ctx.output.trim() : '';
+const openTickets  = ctx.openTickets || [];
+const timerConfig  = ctx.timerConfig || {};
+
+// إيجاد التذاكر المصنّفة
+const salesTicket     = openTickets.find(t => t.crm_ticket_type_id >= 1 && t.crm_ticket_type_id <= 24);
+const complaintTicket = openTickets.find(t => t.ticket_type_code === 'COMPLAINT');
+const techTicket      = openTickets.find(t => t.ticket_type_code === 'TECHNICAL_SUPPORT');
+
+let action = null; // 'create' | 'update' | 'skip'
+let ticketData = {};
+let timerData  = {};
+const now = new Date();
+
+// ──────────────────────────────────────────────
+// DEEP_INFO_PERSONAL أو DEEP_INFO_CORPORATION
+// ──────────────────────────────────────────────
+if (routerValue.startsWith('DEEP_INFO')) {
+  if (salesTicket) {
+    // CASE B — تذكرة مبيعات مفتوحة → حدّث وأعد Timer
+    action = 'update';
+    ticketData = { ticket_id: salesTicket.ticket_id };
+    timerData  = {
+      ticket_id: salesTicket.ticket_id,
+      timer_type: 'PRE_SALE_FOLLOWUP',
+      minutes: timerConfig.crm_pre_sale_timer_minutes || 1435
+    };
+  } else {
+    // CASE A — لا تذاكر → أنشئ تذكرة جديدة
+    action = 'create';
+    ticketData = {
+      ticket_type_id: 1, // DEEP_INFO_PERSONAL type
+      title: `استفسار مبيعات — ${new Date().toISOString().slice(0,10)}`
+    };
+    timerData = {
+      timer_type: 'PRE_SALE_FOLLOWUP',
+      minutes: timerConfig.crm_pre_sale_timer_minutes || 1435
+    };
+  }
+}
+
+// ──────────────────────────────────────────────
+// TECHNICAL_SUPPORT
+// ──────────────────────────────────────────────
+else if (routerValue === 'TECHNICAL_SUPPORT') {
+  if (techTicket) {
+    // CASE C — نفس التذكرة
+    action = 'update';
+    ticketData = { ticket_id: techTicket.ticket_id };
+    timerData  = {
+      ticket_id: techTicket.ticket_id,
+      timer_type: 'TECHNICAL_SUPPORT_FOLLOWUP',
+      minutes: timerConfig.crm_followup_timer_minutes || 1435
+    };
+  } else {
+    action = 'create';
+    ticketData = {
+      ticket_type_id: 25, // TECHNICAL_SUPPORT type_id
+      title: `دعم فني — ${new Date().toISOString().slice(0,10)}`
+    };
+    timerData = {
+      timer_type: 'TECHNICAL_SUPPORT_FOLLOWUP',
+      minutes: timerConfig.crm_technical_timer_minutes || 240
+    };
+  }
+}
+
+// ──────────────────────────────────────────────
+// COMPLAINT
+// ──────────────────────────────────────────────
+else if (routerValue === 'COMPLAINT') {
+  if (complaintTicket) {
+    action = 'update';
+    ticketData = { ticket_id: complaintTicket.ticket_id };
+    timerData  = {
+      ticket_id: complaintTicket.ticket_id,
+      timer_type: 'COMPLAINT_FOLLOWUP',
+      minutes: timerConfig.crm_followup_timer_minutes || 1435
+    };
+  } else {
+    action = 'create';
+    ticketData = {
+      ticket_type_id: 26, // COMPLAINT type_id
+      title: `شكوى — ${new Date().toISOString().slice(0,10)}`
+    };
+    timerData = {
+      timer_type: 'COMPLAINT_FOLLOWUP',
+      minutes: timerConfig.crm_complaint_timer_minutes || 240
+    };
+  }
+}
+
+return [{ json: {
+  ...ctx,
+  ticketAction: action,
+  ticketData,
+  timerData,
+  scheduledAt: new Date(now.getTime() + (timerData.minutes || 1435) * 60 * 1000)
+    .toISOString().slice(0, 19).replace('T', ' ')
+}}];
+```
+
+---
+
+### ★ NODE 5: Execute Ticket SQL — MySQL Node
+
+```sql
+-- إذا كان action = 'create'
+INSERT INTO crm_tickets 
+  (crm_lead_id, crm_ticket_type_id, title, created)
+VALUES 
+  ({{ $json.lead_id }}, {{ $json.ticketData.ticket_type_id }}, 
+   '{{ $json.ticketData.title }}', NOW())
+
+-- إذا كان action = 'update'  
+UPDATE crm_tickets 
+SET updated = NOW(), last_timer_time = NOW()
+WHERE id = {{ $json.ticketData.ticket_id }}
+```
+
+> **ملاحظة:** استخدم **IF Node** قبله للتفريق بين create وupdate.
+
+---
+
+### ★ NODE 6: Save Message + Timer — MySQL Node (مجمّع)
+
+```sql
+-- أولاً: سجّل الرسالة
+INSERT INTO crm_ticket_messages 
+  (crm_ticket_id, router_value, message_text, sender_type, created)
+VALUES 
+  ({{ $json.ticketId }}, 
+   '{{ $json.output }}',
+   '{{ $json.chatInput }}',
+   'customer',
+   NOW());
+
+-- ثانياً: ألغِ أي Timer قديم pending للتذكرة
+UPDATE crm_ticket_timers 
+SET status = 'cancelled' 
+WHERE crm_ticket_id = {{ $json.ticketId }} 
+  AND status = 'pending';
+
+-- ثالثاً: أنشئ Timer جديد
+INSERT INTO crm_ticket_timers 
+  (crm_ticket_id, timer_type, sequence_no, scheduled_at, status)
+VALUES 
+  ({{ $json.ticketId }}, 
+   '{{ $json.timerData.timer_type }}',
+   1,
+   '{{ $json.scheduledAt }}',
+   'pending');
+```
+
+---
+
+## Workflow 2 — Timer Runner (جديد - منفصل)
+
+**اسمه في n8n:** `CRM Timer Runner`  
+**الـ Trigger:** `Schedule Trigger` كل دقيقة
+
+### تسلسل الـ Nodes:
+
+```
+[Schedule Trigger]
+       ↓
+[Node A: Fetch Due Timers]  ← MySQL
+       ↓
+[Node B: Loop Each Timer]   ← Split in Batches (batch=1)
+       ↓
+[Node C: Timer Logic]       ← Code Node
+       ↓
+[IF: Should Send?]
+  ├─ YES → [Node D: Send Messenger Message] ← HTTP Request
+  └─ NO  → skip
+       ↓
+[IF: Should Close Ticket?]
+  ├─ YES → [Node E: Close Ticket]  ← MySQL
+  └─ NO  → [Node F: Reschedule / Next Seq] ← MySQL
+       ↓
+[Node G: Mark Timer Executed]  ← MySQL
+```
+
+### Node A: Fetch Due Timers
+
+```sql
+SELECT 
+  t.id as timer_id,
+  t.crm_ticket_id,
+  t.timer_type,
+  t.sequence_no,
+  t.scheduled_at,
+  tk.crm_lead_id,
+  tk.last_timer_time,
+  l.last_interaction_time,
+  lsp.platform_user_id,
+  lsp.platform,
+  lsp.display_name
+FROM crm_ticket_timers t
+JOIN crm_tickets tk ON t.crm_ticket_id = tk.id
+JOIN crm_leads l ON tk.crm_lead_id = l.id
+JOIN crm_lead_social_profiles lsp ON l.id = lsp.crm_lead_id
+WHERE t.scheduled_at <= NOW()
+  AND t.status = 'pending'
+  AND tk.closed = 0
+LIMIT 50
+```
+
+### Node C: Timer Logic — Code Node
+
+```javascript
+// Code Node: "Timer Logic"
+const timer = $input.first().json;
+const lastInteraction = new Date(timer.last_interaction_time);
+const lastTimerTime   = new Date(timer.last_timer_time || 0);
+const now             = new Date();
+
+// هل ردّ العميل بعد آخر تشغيل للـ Timer؟
+const customerReplied = lastInteraction > lastTimerTime;
+
+// هل الشباك مفتوح؟ (أقل من 24 ساعة منذ آخر تفاعل)
+const windowOpen = (now - lastInteraction) < (24 * 60 * 60 * 1000);
+
+let decision = 'skip'; // 'send' | 'reschedule' | 'close' | 'skip'
+let nextSeq   = timer.sequence_no;
+let newScheduledAt = null;
+
+// إيجاد المدة من atc_config (مررها كـ variable من Workflow)
+// هنا قيمة افتراضية 1435 دقيقة (23h55m)
+const followupMinutes = 1435;
+
+if (customerReplied) {
+  // العميل ردّ → أعد Timer
+  decision = 'reschedule';
+  const nextTime = new Date(lastInteraction.getTime() + followupMinutes * 60 * 1000);
+  newScheduledAt = nextTime.toISOString().slice(0,19).replace('T',' ');
+}
+else if (timer.sequence_no === 1 && windowOpen) {
+  // Seq 1 + شباك مفتوح → أرسل
+  decision = 'send';
+  nextSeq = 2;
+  const nextTime = new Date(now.getTime() + followupMinutes * 60 * 1000);
+  newScheduledAt = nextTime.toISOString().slice(0,19).replace('T',' ');
+}
+else if (timer.sequence_no >= 2) {
+  // Seq 2 بدون رد → أغلق التذكرة (لا ترسل)
+  decision = 'close';
+}
+
+return [{ json: { ...timer, decision, nextSeq, newScheduledAt } }];
+```
+
+### Node D: Send Messenger Message
+
+```javascript
+// Code Node: "Build Follow-up Message"
+const timer = $input.first().json;
+const name  = timer.display_name || 'عزيزي';
+
+let message = '';
+
+if (timer.timer_type === 'PRE_SALE_FOLLOWUP') {
+  message = timer.sequence_no === 1
+    ? `سلام يا ${name} 👋 مرحباً بيك في أفروتك. هل لا زال لديك استفسارات حول الكورسات؟`
+    : `أهلاً ${name}، نحن هنا إذا احتجت أي مساعدة. لا تتردد في السؤال 😊`;
+}
+else if (timer.timer_type === 'TECHNICAL_SUPPORT_FOLLOWUP') {
+  message = `${name}، هل تم حل المشكلة بنجاح؟ 🔧 أخبرنا لنتأكد من ذلك.`;
+}
+else if (timer.timer_type === 'COMPLAINT_FOLLOWUP') {
+  message = `${name}، نحن آسفون على أي إزعاج. هل تمت معالجة الموضوع بشكل مرضٍ؟`;
+}
+
+return [{ json: { ...timer, followUpMessage: message } }];
+```
+
+**HTTP Request Node** (مطابق للـ HTTP Request16 الموجود):
+
+```json
+{
+  "recipient": { "id": "{{ $('Timer Logic').first().json.platform_user_id }}" },
+  "messaging_type": "RESPONSE",
+  "message": { "text": "{{ $json.followUpMessage }}" }
+}
+```
+
+### Node E: Close Ticket SQL
+
+```sql
+UPDATE crm_tickets SET closed = 1, updated = NOW()
+WHERE id = {{ $json.crm_ticket_id }};
+
+UPDATE crm_ticket_timers SET status = 'executed', executed_at = NOW()
+WHERE id = {{ $json.timer_id }};
+```
+
+### Node F: Reschedule / Create Next Seq SQL
+
+```sql
+-- إذا decision = 'reschedule': عدّل الـ Timer الحالي
+UPDATE crm_ticket_timers 
+SET scheduled_at = '{{ $json.newScheduledAt }}', status = 'pending'
+WHERE id = {{ $json.timer_id }};
+
+-- إذا decision = 'send': أنشئ Seq التالي
+UPDATE crm_ticket_timers SET status = 'executed', executed_at = NOW()
+WHERE id = {{ $json.timer_id }};
+
+INSERT INTO crm_ticket_timers (crm_ticket_id, timer_type, sequence_no, scheduled_at, status)
+VALUES ({{ $json.crm_ticket_id }}, '{{ $json.timer_type }}', {{ $json.nextSeq }},
+        '{{ $json.newScheduledAt }}', 'pending');
+
+-- تحديث last_timer_time للتذكرة
+UPDATE crm_tickets SET last_timer_time = NOW() WHERE id = {{ $json.crm_ticket_id }};
+```
+
+---
+
+## Workflow 3 — Payment Verifier (جديد - منفصل)
+
+**اسمه في n8n:** `CRM Payment Verifier`  
+**الـ Trigger:** `Schedule Trigger` كل 5 دقائق
+
+```
+[Schedule Trigger: كل 5 دقائق]
+       ↓
+[Node A: Find Confirmed Payments] ← MySQL
+       ↓
+[IF: Records Found?]
+  ├─ NO  → end
+  └─ YES ↓
+[Node B: Loop Each] ← Split in Batches
+       ↓
+[Node C: Update Ticket to SOLD] ← MySQL
+       ↓
+[Node D: Create POST_SALE Ticket + Timer] ← MySQL
+       ↓
+[Node E: Send Congrats Message] ← HTTP Request
+```
+
+### Node A: Find Confirmed Payments
+
+```sql
+SELECT 
+  cr.id as course_reg_id,
+  cr.student_id,
+  cr.running_course_id,
+  rc.start_time as course_start_time,
+  rc.finish_time as course_finish_time,
+  u.id as user_id,
+  l.id as lead_id,
+  t.id as ticket_id,
+  lsp.platform_user_id
+FROM courses_reg cr
+JOIN users u ON cr.student_id = u.id
+JOIN running_courses rc ON cr.running_course_id = rc.id
+JOIN crm_leads l ON u.id = l.user_id_fk
+JOIN crm_lead_social_profiles lsp ON l.id = lsp.crm_lead_id
+JOIN crm_tickets t ON l.id = t.crm_lead_id
+JOIN crm_sales_ticket_levels sl ON t.sales_level_id = sl.id
+WHERE cr.can_attend = 1
+  AND sl.code = 'PRE_SALE'
+  AND t.closed = 0
+  AND t.running_program_id = cr.running_course_id
+LIMIT 20
+```
+
+### Node C: Update to SOLD + Create POST_SALE
+
+```sql
+-- تحديث التذكرة إلى SOLD
+UPDATE crm_tickets t
+JOIN crm_sales_ticket_levels sl ON sl.code = 'SOLD'
+SET t.sales_level_id = sl.id, t.updated = NOW()
+WHERE t.id = {{ $json.ticket_id }};
+
+-- إنشاء تذكرة POST_SALE
+INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, running_program_id, created)
+SELECT 
+  {{ $json.lead_id }},
+  (SELECT id FROM crm_ticket_types WHERE code = 'POST_SALE_FOLLOWUP'),
+  CONCAT('متابعة مشترك — ', c.name),
+  {{ $json.running_course_id }},
+  NOW()
+FROM running_courses rc
+JOIN courses c ON rc.course_id = c.id
+WHERE rc.id = {{ $json.running_course_id }};
+
+-- Timer للـ POST_SALE (يبدأ يوم الكورس)
+INSERT INTO crm_ticket_timers (crm_ticket_id, timer_type, sequence_no, scheduled_at, status)
+VALUES (LAST_INSERT_ID(), 'POST_SALE_FOLLOWUP', 1, '{{ $json.course_start_time }}', 'pending');
+```
+
+---
+
+## ملخص ما تحتاج عمله الآن
+
+### المرحلة 1 (اليوم):
+1. **نفّذ SQL** من خطوة 0 في phpMyAdmin
+2. **تحقق** أن `crm_ticket_types` يحتوي على:
+   - `COMPLAINT` — `TECHNICAL_SUPPORT` — `POST_SALE_FOLLOWUP`
+3. **تحقق** أن `crm_sales_ticket_levels` يحتوي على: `PRE_SALE` — `SOLD`
+
+### المرحلة 2:
+4. أضف Nodes 1-3 في الـ Messenger Workflow قبل AI Agent4
+5. أضف IF Node بعد Switch6 فروع DEEP_INFO وCOMPLAINT وTECHNICAL
+6. أضف Ticket Manager (Node 4) في كل فرع
+7. أضف MySQL Nodes 5 و6
+
+### المرحلة 3:
+8. أنشئ **Timer Runner** Workflow
+9. أنشئ **Payment Verifier** Workflow
