@@ -1,8 +1,8 @@
 [
   {
-    "scenario": "1a. دورة مبيعات أونلاين (شخصي) - دورة غير موجودة في الكاتالوج",
-    "expected_ticket_type": "NEW_COURSE_REQUEST_PERSONAL_ONLINE_COURSES",
-    "description": "التسويق الرقمي غير موجود في جدول courses → NEW_COURSE_REQUEST. يُرد بأن الدورة غير متوفرة ويُعرض عرض البدائل.",
+    "scenario": "1a. دورة التسويق الرقمي أونلاين (شخصي) - دورة موجودة وغير مفعلة",
+    "expected_ticket_type": "OUT_OF_PLAN_PERSONAL_ONLINE_COURSES",
+    "description": "التسويق الرقمي موجود في جدول courses لكن لا يعمل حالياً → OUT_OF_PLAN. يُرد بأن الدورة غير متوفرة ويُعرض عرض البدائل.",
     "postman_payload": {
       "platform": "facebook",
       "platform_user_id": "fb_sale_001",
@@ -39,7 +39,7 @@
     "postman_payload": {
       "platform": "whatsapp",
       "platform_user_id": "wa_corp_001",
-      "text": "نحن شركة ونريد حجز مقاعد لـ 10 موظفين في دورة المبيعات أونلاين، هل تقدمون عروضاً للشركات؟",
+      "text": "نحن شركة ونريد حجز مقاعد لـ 10 موظفين في دورة الطيران الفضائي أونلاين، هل تقدمون عروضاً للشركات؟",
       "ai_ticket_type_code": "AUTO"
     }
   },
@@ -72,7 +72,7 @@
     "postman_payload": {
       "platform": "whatsapp",
       "platform_user_id": "wa_req_001",
-      "text": "هل تقدمون دورات متقدمة في الذكاء الاصطناعي وتطوير تطبيقات الموبايل؟",
+      "text": "هل تقدمون دورات متقدمة في الذكاء الاصطناعي وصناعة الصواريخ وتطوير تطبيقات الموبايل؟",
       "ai_ticket_type_code": "AUTO"
     }
   },
@@ -83,7 +83,7 @@
     "postman_payload": {
       "platform": "whatsapp",
       "platform_user_id": "wa_req_002",
-      "text": "هل تقدمون دورة في الأمن السيبراني أونلاين؟ أريد التسجيل.",
+      "text": "هل تقدمون دورة في صناعة المحتوى أونلاين؟ أريد التسجيل.",
       "ai_ticket_type_code": "AUTO"
     }
   },
@@ -106,6 +106,61 @@
       "platform": "facebook",
       "platform_user_id": "fb_sale_001",
       "text": "نعم ماذا متاح؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "9. الاستفسار عن معلومات المدرب لدورة متاحة",
+    "expected_ticket_type": "PERSONAL_ONLINE_COURSES",
+    "description": "استفسار عن معلومات المدرب لدورة موجودة في الكاتالوج. يجب أن يستخرج النظام الوصف الخاص بالمدرب ويرد به بوضوح.",
+    "postman_payload": {
+      "platform": "instagram",
+      "platform_user_id": "ig_trainer_001",
+      "text": "من هو مدرب دورة Python Essentials؟ وما هي خبراته؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "10. الاستفسار عن طرق التسجيل والدفع",
+    "expected_ticket_type": "GENERAL_ENQUIRY",
+    "description": "استفسار عن كيفية التسجيل والوسائل المالية المتاحة. يجب أن يذكر خطوات الموقع وتطبيق بنكك وفوري وغيرها.",
+    "postman_payload": {
+      "platform": "whatsapp",
+      "platform_user_id": "wa_reg_99",
+      "text": "كيف بقدر أسجل في الكورسات؟ وعايز أعرف طرق الدفع المتاحة شنو؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "11. الاستفسار عن سياسة الاسترجاع والتعويض",
+    "expected_ticket_type": "GENERAL_ENQUIRY",
+    "description": "طلب معلومات عن سياسة الإلغاء. يجب أن يوضح النسب (10% و 25%) وشروط الاسترداد.",
+    "postman_payload": {
+      "platform": "facebook",
+      "platform_user_id": "fb_policy_01",
+      "text": "لو سجلت وما قدرت أحضر، بقدر أسترد قروشي؟ وما هي سياسة الإلغاء؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "12. الاستفسار عن موقع المركز الجغرافي",
+    "expected_ticket_type": "GENERAL_ENQUIRY",
+    "description": "السؤال عن الموقع والمعالم القريبة. يجب أن يذكر حي الواحة ومسجد الواحة الكبير والإحداثيات.",
+    "postman_payload": {
+      "platform": "instagram",
+      "platform_user_id": "ig_loc_02",
+      "text": "موقعكم وين بالضبط في أم درمان؟ وكيف أوصل ليكم؟",
+      "ai_ticket_type_code": "AUTO"
+    }
+  },
+  {
+    "scenario": "13. مشكلة تقنية في الدخول للمنصة",
+    "expected_ticket_type": "TECHNICAL_SUPPORT",
+    "description": "تبليغ عن مشكلة في كلمة المرور أو تسجيل الدخول. يجب أن يتصرف كدعم فني ويقدم حلول من الـ FAQ.",
+    "postman_payload": {
+      "platform": "facebook",
+      "platform_user_id": "fb_tech_05",
+      "text": "يا جماعة المنصة ما راضية تفتح معاي، وكل ما أدخل كلمة السر بقول لي خطأ. أعمل شنو؟",
       "ai_ticket_type_code": "AUTO"
     }
   }

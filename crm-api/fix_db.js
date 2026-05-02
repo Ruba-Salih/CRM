@@ -1,37 +1,29 @@
 const mysql = require('mysql2/promise');
+require('dotenv').config();
 
 async function fix() {
-    const connection = await mysql.createConnection({
-        host: 'localhost',
-        user: 'lawyer_system',
-        password: '1234',
-        database: 'test4_atc'
+    const pool = mysql.createPool({
+        host: process.env.DB_HOST,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME_ATC,
+        charset: 'utf8mb4'
     });
-    
-    console.log('Connected to DB.');
-    
-    const queries = [
-        "ALTER TABLE crm_tickets ADD COLUMN sales_level_id int(11) DEFAULT NULL",
-        "ALTER TABLE crm_tickets ADD COLUMN running_program_id int(11) DEFAULT NULL",
-        "ALTER TABLE crm_tickets ADD COLUMN running_program_type enum('Course','Workshop') DEFAULT NULL",
-        "ALTER TABLE crm_tickets ADD COLUMN last_timer_time timestamp NULL DEFAULT NULL",
-        "ALTER TABLE crm_leads ADD COLUMN user_id_fk int(11) DEFAULT NULL",
-        "CREATE TABLE IF NOT EXISTS crm_ticket_timers ( id int(11) NOT NULL AUTO_INCREMENT, crm_ticket_id int(11) NOT NULL, timer_type enum('PRE_SALE_FOLLOWUP','POST_SALE_FOLLOWUP','TECHNICAL_SUPPORT_FOLLOWUP','COMPLAINT_FOLLOWUP') NOT NULL, sequence_no tinyint(3) DEFAULT 1, scheduled_at timestamp NOT NULL, executed_at timestamp NULL DEFAULT NULL, status enum('pending','executed','cancelled','skipped') DEFAULT 'pending', created timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;",
-        "CREATE TABLE IF NOT EXISTS crm_platforms ( id int(11) NOT NULL AUTO_INCREMENT, code varchar(50) NOT NULL, name varchar(100) NOT NULL, created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), UNIQUE KEY code (code) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;",
-        "INSERT IGNORE INTO crm_platforms (code, name) VALUES ('facebook', 'Facebook'), ('instagram', 'Instagram'), ('whatsapp', 'WhatsApp'), ('tiktok', 'TikTok'), ('sms', 'SMS');",
-        "ALTER TABLE crm_ticket_messages ADD COLUMN platform_id int(11) DEFAULT NULL, ADD COLUMN interaction_type enum('message', 'comment') DEFAULT 'message', ADD COLUMN router_value varchar(50) DEFAULT NULL"
-    ];
 
-    for (let q of queries) {
-        try {
-            await connection.query(q);
-            console.log('Processed query successfully');
-        } catch(err) {
-            console.log('Skipped/Failed query: ', err.message);
-        }
+    const descr = 'مدرب خبير في لغة بايثون وعلوم البيانات، حاصل على شهادة دكتوراه في الذكاء الاصطناعي مع خبرة تزيد عن 10 سنوات.';
+    
+    // Update Python course name too just in case
+    await pool.query("UPDATE courses SET name_ar = 'أساسيات بايثون' WHERE id = 3");
+    
+    const [rows] = await pool.query("SELECT trainer_id FROM running_courses WHERE course_id = 3 LIMIT 1");
+    if (rows.length > 0) {
+        await pool.query("UPDATE users SET descr_ar = ? WHERE id = ?", [descr, rows[0].trainer_id]);
+        console.log("✅ Database updated with proper Arabic text.");
+    } else {
+        console.log("❌ No running course found for ID 3.");
     }
-
-    await connection.end();
+    
+    process.exit(0);
 }
 
 fix();

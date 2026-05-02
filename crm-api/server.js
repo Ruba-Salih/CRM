@@ -22,7 +22,8 @@ async function classifyMessage(text, pool) {
         let catalogText = "None (No courses in catalog)";
         try {
             if (pool) {
-                const [courses] = await pool.query("SELECT name, name_ar FROM courses");
+                const DB_ATC = process.env.DB_NAME_ATC || 'system_atc';
+                const [courses] = await pool.query(`SELECT name, name_ar FROM ${DB_ATC}.courses`);
                 if (courses.length > 0) {
                     catalogText = courses.map(c => `- ${c.name} (${c.name_ar})`).join('\n');
                 }
@@ -128,18 +129,18 @@ async function resolveTicketCode(baseCode, courseName, pool) {
     try {
         const normalizedInput = courseName.replace(/[\s-]/g, '').toLowerCase();
 
-        // Check if any course in the courses table matches the extracted name
+        const DB_ATC = process.env.DB_NAME_ATC || 'system_atc';
         const [rows] = await pool.query(`
             SELECT
                 c.id,
                 (
                     SELECT COUNT(*)
-                    FROM running_courses rc
+                    FROM ${DB_ATC}.running_courses rc
                     WHERE rc.course_id = c.id
                       AND rc.start_time > NOW()
                       AND rc.cancelled = 0
                 ) AS active_runs
-            FROM courses c
+            FROM ${DB_ATC}.courses c
             WHERE REPLACE(REPLACE(LOWER(c.name), ' ', ''), '-', '') LIKE CONCAT('%', ?, '%')
                OR REPLACE(REPLACE(LOWER(c.name_ar), ' ', ''), '-', '') LIKE CONCAT('%', ?, '%')
             LIMIT 1
@@ -165,7 +166,7 @@ async function resolveTicketCode(baseCode, courseName, pool) {
         return baseCode; // Safe fallback
     }
 }
-async function generateAiReply(text, classification, courseContext = "") {
+async function generateAiReply(text, classification, courseContext = "", requirementsContext = "") {
     try {
         console.log(`🤖 Prompting local Ollama to generate a conversational response...`);
         const response = await fetch('http://localhost:11434/api/generate', {
@@ -173,23 +174,25 @@ async function generateAiReply(text, classification, courseContext = "") {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: OLLAMA_MODEL,
-                prompt: `You are a professional customer service agent for a training center. Your goal is to assist the customer accurately based ONLY on the provided context.
+                prompt: `You are the primary Customer Service and Technical Support AI for Afro-Tech Training Center.
+You MUST provide helpful, direct answers. You are NOT allowed to say "Contact support" because YOU ARE the support.
 
 Customer Message: "${text}"
 Routing Classification: ${classification}
 
-${courseContext ? `=== AVAILABLE COURSES CONTEXT (use ONLY this data — do NOT invent prices, dates, or details) ===\n${courseContext}\n================================================================` : "(No course context available — do not invent course details)"}
+${courseContext ? `=== AVAILABLE COURSES CATALOG ===\n${courseContext}\n================================` : "(No specific course catalog available for this query)"}
 
-STRICT RULES — violating any rule is FORBIDDEN:
-1. NEVER invent, guess, or hallucinate prices, dates, hours, or any detail not explicitly present in the AVAILABLE COURSES CONTEXT above.
-2. IF the customer asks about a specific course:
-   a. Search by name in the AVAILABLE COURSES CONTEXT.
-   b. IF FOUND: Give them all the details from the context (price in SDG and USD, start/end dates, total hours, seats, description, what they will learn, outlines). You may be detailed here.
-   c. IF NOT FOUND: Apologize that the specific course is currently unavailable. Ask: "هل ترغب في معرفة الدورات الأخرى المتاحة لدينا حالياً؟" — DO NOT list courses unprompted.
-3. IF the customer asks generally "ما الدورات المتاحة؟" or "نعم" after being asked about other courses:
-   - List ALL available courses from the context with their name, price (SDG and USD), start date, and delivery method.
-4. DO NOT say "please contact us" or "reach out to us" — they are already talking to you.
-5. Reply in Arabic only. Be helpful and professional.`,
+${requirementsContext ? `=== CENTER POLICIES, REGISTRATION & TECH FAQ ===\n${requirementsContext}\n================================` : "(No policy context available)"}
+
+STRICT INSTRUCTIONS:
+1. ROLE: You are the support agent. If a user has a technical issue (login, password, video issues), use the "technical_support_faq" in the context above to solve it. 
+2. NEVER tell the user to contact another support team. If the specific issue is not in the FAQ, provide the center's contact numbers from "registration_methods" (0925777109, 0967492783) as a last resort, but first TRY to solve it.
+3. REGISTRATION: If they ask how to register, use the "registration_methods" steps.
+4. REFUNDS: If they ask about refunds, use the "refund_policy" data exactly.
+5. COURSE DETAILS: If they ask about a specific course, use the CATALOG. If not found in CATALOG, apologize and ask if they want to see other available courses.
+6. TONE: Professional, friendly, and use Sudanese Arabic dialect where appropriate (Sudanese slang).
+7. LANGUAGE: Reply in Arabic only.
+8. NO HALLUCINATION: If a price or date is not in the context, do not invent it. Say you are not sure about that specific detail.`,
                 stream: false
             })
         });
@@ -218,21 +221,25 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    multipleStatements: true
+    multipleStatements: true,
+    charset: 'utf8mb4'
 });
 
 // Start background jobs passing the DB pool
 initJobs(pool);
 
 app.post('/api/webhook/messenger', async (req, res) => {
+    console.log(`📩 Incoming request from ${req.body.platform_user_id}: ${req.body.text}`);
     const startTime = Date.now();
     const {
         platform = 'facebook',
+        interaction_type = 'message',
         platform_user_id,
         text,
         ai_score = 0,
         ai_ticket_type_code = 'GENERAL_ENQUIRY',
-        ai_program_id = null
+        ai_program_id = null,
+        attachment_url = null
     } = req.body;
 
     let ticketCode = ai_ticket_type_code;
@@ -254,6 +261,20 @@ app.post('/api/webhook/messenger', async (req, res) => {
     // Fetch rich course context for any course-related classification OR for general enquiries
     // (so follow-up questions like "نعم ماذا متاح؟" still get real data)
     const needsCourseContext = ticketCode.includes('COURSES') || ticketCode === 'GENERAL_ENQUIRY';
+    const DB_ATC = process.env.DB_NAME_ATC || 'system_atc';
+
+    // Fetch dynamic requirements (policies, registration, etc.)
+    let requirementsContext = "";
+    try {
+        const [reqs] = await pool.query(`SELECT key_name, content_ar FROM crm_dynamic_requirements`);
+        if (reqs.length > 0) {
+            requirementsContext = "=== سياسات ومعلومات المركز ===\n" +
+                reqs.map(r => `🔹 ${r.key_name}: ${r.content_ar}`).join("\n\n");
+        }
+    } catch (reqErr) {
+        console.error('⚠️ Failed to pull dynamic requirements:', reqErr.message);
+    }
+
     if (needsCourseContext) {
         try {
             // Fetch all upcoming active courses with FULL details from both tables
@@ -270,31 +291,22 @@ app.post('/api/webhook/messenger', async (req, res) => {
                     rc.tot_seats,
                     rc.alias                                                     AS group_alias,
                     rc.reg_deadline,
-                    COALESCE(rc.tot_hours, c.tot_hours)                         AS total_hours,
+                    rc.tot_hours                                                 AS total_hours,
                     DATE_FORMAT(rc.start_time,  '%Y-%m-%d')                     AS start_date,
                     DATE_FORMAT(rc.finish_time, '%Y-%m-%d')                     AS end_date,
-                    IF(rc.room_id IS NULL, 'أونلاين', 'حضورياً في المركز')     AS delivery_method
-                FROM running_courses rc
-                JOIN courses c ON rc.course_id = c.id
+                    IF(rc.room_id IS NULL, 'أونلاين', 'حضورياً في المركز')     AS delivery_method,
+                    COALESCE(u.descr_ar, u.descr)                               AS trainer_description
+                FROM ${DB_ATC}.running_courses rc
+                JOIN ${DB_ATC}.courses c ON rc.course_id = c.id
+                LEFT JOIN ${DB_ATC}.users u ON rc.trainer_id = u.id
                 WHERE rc.start_time > NOW() AND rc.cancelled = 0
                 ORDER BY rc.start_time ASC
                 LIMIT 10
             `);
 
             for (let c of courses) {
-                // Fetch Arabic outcomes
-                const [outcomes] = await pool.query(
-                    'SELECT name FROM course_outcomes WHERE course_id = ? ORDER BY id ASC',
-                    [c.id]
-                );
-                c.outcomesList = outcomes.map(o => o.name);
-
-                // Fetch Arabic outlines
-                const [outlines] = await pool.query(
-                    'SELECT name FROM course_outlines WHERE course_id = ? ORDER BY id ASC',
-                    [c.id]
-                );
-                c.outlinesList = outlines.map(o => o.name);
+                c.outcomesList = [];
+                c.outlinesList = [];
             }
 
             if (courses.length > 0) {
@@ -320,6 +332,11 @@ app.post('/api/webhook/messenger', async (req, res) => {
                         if (c.outlinesList && c.outlinesList.length > 0) {
                             info += `\n   المحاور الرئيسية:\n     • ` + c.outlinesList.join('\n     • ');
                         }
+                        if (c.trainer_description) {
+                            // Trim and clean up the description for the AI
+                            let cleanTrainerDesc = c.trainer_description.replace(/<[^>]+>/g, '').replace(/\n+/g, ' ').trim();
+                            info += `\n   معلومات المدرب: ${cleanTrainerDesc}`;
+                        }
                         return info;
                     }).join("\n\n");
                 courseContext += "\n\n=== نهاية قائمة الدورات ===";
@@ -331,7 +348,7 @@ app.post('/api/webhook/messenger', async (req, res) => {
         }
     }
 
-    const aiReply = await generateAiReply(text, ticketCode, courseContext);
+    const aiReply = await generateAiReply(text, ticketCode, courseContext, requirementsContext);
 
     if (!platform_user_id || !text) {
         return res.status(400).json({ error: 'Missing platform_user_id or text payload.' });
@@ -385,21 +402,82 @@ app.post('/api/webhook/messenger', async (req, res) => {
         const techTicket = openTickets.find(t => t.ticket_type_code === 'TECHNICAL_SUPPORT' || t.crm_ticket_type_id === 25);
         const postSaleTicket = openTickets.find(t => t.ticket_type_code === 'POST_SALE_FOLLOWUP');
 
+        // 4. Scoring Logic (Section 4)
+        let scoreModifier = 0;
+        let transferToHuman = false;
+        let forceClose = false;
+        let ticketScoreZero = false;
+
+        // A. Platform & Intent
+        if (ticketCode !== 'GENERAL_ENQUIRY') scoreModifier += 10;
+        if (platform === 'whatsapp') scoreModifier += 25;
+        else if (platform === 'tiktok' || platform === 'instagram') scoreModifier += 10;
+
+        // B. Reactions
+        if (interaction_type === 'reaction') {
+            if (['❤️', '👍', '😲', '😍'].includes(text)) scoreModifier += 5;
+            if (['😡', '😢', '👎', '😠'].includes(text)) scoreModifier -= 5;
+        }
+
+        // C. B2B Companies
+        if (ticketCode.includes('CORPORATION') || (text && (text.includes('شركتنا') || text.includes('موظفين')))) {
+            transferToHuman = true;
+        }
+
+        // D. Deductions
+        if (text) {
+            if (text.includes('غالي')) scoreModifier -= 15;
+            if (text.includes('ما عايز') || text.includes('لا اريد') || text.includes('لا أريد')) {
+                ticketScoreZero = true;
+                forceClose = true;
+            }
+        }
+
+        let messageCount = 0;
+        if (salesTicket) {
+            const [msgCountResult] = await pool.query('SELECT COUNT(*) as cnt FROM crm_ticket_messages WHERE crm_ticket_id = ?', [salesTicket.id]);
+            messageCount = msgCountResult[0].cnt;
+
+            // E. Message Volume Modifier
+            if (messageCount < 5 && text && (text.includes('رقم الحساب') || text.includes('الدفع') || text.includes('بنكك') || text.includes('دفع'))) {
+                scoreModifier += 15;
+            }
+            if (messageCount > 15 && salesTicket.ticket_type_code && salesTicket.ticket_type_code.includes('COURSES')) {
+                scoreModifier -= 2;
+            }
+        }
+
+        let finalComputedScore = computedScore + scoreModifier;
+        if (ticketScoreZero) finalComputedScore = 0;
+
         let ticketId = null;
         let actionTaken = '';
         let timerType = null;
         let timerMinutes = 1435;
 
-        // 4. Ticket routing cases logic
+        // 5. Ticket routing cases logic
         if (ticketCode.startsWith('DEEP_INFO') || ticketCode.startsWith('PERSONAL') || ticketCode.startsWith('CORPORATION')) {
             // Case B - Sales Ticket Logic
             if (salesTicket) {
                 ticketId = salesTicket.id;
-                // Update course/program info if different
+                let updatedScore = (salesTicket.score || 0) + finalComputedScore;
+                if (ticketScoreZero) updatedScore = 0;
+                if (updatedScore > 100) updatedScore = 100;
+                if (updatedScore < 0) updatedScore = 0;
+                
+                let closeQuery = forceClose ? ', closed = 1' : '';
+                await pool.query(`UPDATE crm_tickets SET score = ?, transfer_to_human = GREATEST(transfer_to_human, ?) ${closeQuery}, updated = NOW() WHERE id = ?`, [updatedScore, transferToHuman ? 1 : 0, ticketId]);
+
                 if (ai_program_id && salesTicket.running_program_id !== ai_program_id) {
                     await pool.query(`UPDATE crm_tickets SET running_program_id = ?, updated = NOW() WHERE id = ?`, [ai_program_id, ticketId]);
                 }
-                actionTaken = 'RESTARTED_SALES_TIMER';
+                actionTaken = forceClose ? 'CLOSED_SALES_TICKET_REJECTION' : 'UPDATED_SALES_TICKET';
+
+                // F. Hot Leads Notification
+                if (updatedScore >= 70 && !forceClose) {
+                    console.log(`🔥 HOT LEAD DETECTED! Ticket ID: ${ticketId}, Score: ${updatedScore}`);
+                }
+
             } else {
                 // Case A - Create new sales ticket
                 const [typeRes] = await pool.query(`SELECT id FROM crm_ticket_types WHERE code = ? LIMIT 1`, [ticketCode]);
@@ -407,26 +485,30 @@ app.post('/api/webhook/messenger', async (req, res) => {
 
                 let [preSaleLevel] = await pool.query(`SELECT id FROM crm_sales_ticket_levels WHERE code = 'PRE_SALE' LIMIT 1`);
                 const preSaleLevelId = preSaleLevel.length > 0 ? preSaleLevel[0].id : 1;
+                
+                let initialScore = finalComputedScore;
+                if (initialScore > 100) initialScore = 100;
+                if (initialScore < 0) initialScore = 0;
 
                 const [newTicket] = await pool.query(
-                    `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, sales_level_id, title, running_program_id, running_program_type, score, created, updated) 
-                     VALUES (?, ?, ?, ?, ?, 'Course', ?, NOW(), NOW())`,
-                    [leadId, typeId, preSaleLevelId, `مبيعات — ${ticketCode}`, ai_program_id, computedScore]
+                    `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, sales_level_id, title, running_program_id, running_program_type, score, transfer_to_human, closed, created, updated) 
+                     VALUES (?, ?, ?, ?, ?, 'Course', ?, ?, ?, NOW(), NOW())`,
+                    [leadId, typeId, preSaleLevelId, `مبيعات — ${ticketCode}`, ai_program_id, initialScore, transferToHuman ? 1 : 0, forceClose ? 1 : 0]
                 );
                 ticketId = newTicket.insertId;
                 actionTaken = 'CREATED_SALES_TICKET';
             }
-            timerType = 'PRE_SALE_FOLLOWUP';
+            timerType = forceClose ? null : 'PRE_SALE_FOLLOWUP';
             timerMinutes = preSaleMinutes;
 
         } else if (ticketCode === 'COMPLAINT') {
             if (complaintTicket) {
                 ticketId = complaintTicket.id;
-                actionTaken = 'RESTARTED_COMPLAINT_TIMER';
+                actionTaken = 'UPDATED_COMPLAINT_TICKET';
             } else {
                 const [newTicket] = await pool.query(
                     `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, score, created, updated) VALUES (?, 26, ?, ?, NOW(), NOW())`,
-                    [leadId, `شكوى — ${new Date().toISOString().slice(0,10)}`, computedScore]
+                    [leadId, `شكوى — ${new Date().toISOString().slice(0,10)}`, finalComputedScore]
                 );
                 ticketId = newTicket.insertId;
                 actionTaken = 'CREATED_COMPLAINT_TICKET';
@@ -437,11 +519,11 @@ app.post('/api/webhook/messenger', async (req, res) => {
         } else if (ticketCode === 'TECHNICAL_SUPPORT') {
             if (techTicket) {
                 ticketId = techTicket.id;
-                actionTaken = 'RESTARTED_TECH_TIMER';
+                actionTaken = 'UPDATED_TECH_TICKET';
             } else {
                 const [newTicket] = await pool.query(
                     `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, score, created, updated) VALUES (?, 25, ?, ?, NOW(), NOW())`,
-                    [leadId, `دعم فني — ${new Date().toISOString().slice(0,10)}`, computedScore]
+                    [leadId, `دعم فني — ${new Date().toISOString().slice(0,10)}`, finalComputedScore]
                 );
                 ticketId = newTicket.insertId;
                 actionTaken = 'CREATED_TECH_TICKET';
@@ -450,7 +532,6 @@ app.post('/api/webhook/messenger', async (req, res) => {
             timerMinutes = technicalMinutes;
 
         } else if (ticketCode.startsWith('OUT_OF_PLAN') || ticketCode.startsWith('NEW_COURSE_REQUEST')) {
-            // Demand tracking tickets - no timers required
             const [typeRes] = await pool.query(`SELECT id FROM crm_ticket_types WHERE code = ? LIMIT 1`, [ticketCode]);
             const typeId = typeRes.length > 0 ? typeRes[0].id : 46;
 
@@ -482,14 +563,11 @@ app.post('/api/webhook/messenger', async (req, res) => {
             );
         }
 
-        // 6. Log the Customer Message
-        const [platforms] = await pool.query(`SELECT id FROM crm_platforms WHERE code = ? LIMIT 1`, [platform]);
-        const platformId = platforms.length > 0 ? platforms[0].id : null;
-
+        // 7. Log the Customer Message
         await pool.query(
-            `INSERT INTO crm_ticket_messages (crm_ticket_id, platform_id, interaction_type, message_text, router_value, sender_type, created) 
-             VALUES (?, ?, 'message', ?, ?, 'customer', NOW())`,
-            [ticketId || 0, platformId, text, ticketCode]
+            `INSERT INTO crm_ticket_messages (crm_ticket_id, platform, interaction_type, message_text, attachment_url, router_value, sender_type, created) 
+             VALUES (?, ?, ?, ?, ?, ?, 'customer', NOW())`,
+            [ticketId || 0, platform, interaction_type, text, attachment_url, ticketCode]
         );
 
         const duration = ((Date.now() - startTime) / 1000).toFixed(3);
