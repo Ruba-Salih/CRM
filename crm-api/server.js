@@ -23,7 +23,7 @@ async function classifyMessage(text, pool) {
         try {
             if (pool) {
                 const DB_ATC = process.env.DB_NAME_ATC || 'system_atc';
-                const [courses] = await pool.query(`SELECT name, name_ar FROM ${DB_ATC}.courses`);
+                const [courses] = await pool.query(`SELECT name, name_ar FROM \`${DB_ATC}\`.courses`);
                 if (courses.length > 0) {
                     catalogText = courses.map(c => `- ${c.name} (${c.name_ar})`).join('\n');
                 }
@@ -135,12 +135,12 @@ async function resolveTicketCode(baseCode, courseName, pool) {
                 c.id,
                 (
                     SELECT COUNT(*)
-                    FROM ${DB_ATC}.running_courses rc
+                    FROM \`${DB_ATC}\`.running_courses rc
                     WHERE rc.course_id = c.id
                       AND rc.start_time > NOW()
                       AND rc.cancelled = 0
                 ) AS active_runs
-            FROM ${DB_ATC}.courses c
+            FROM \`${DB_ATC}\`.courses c
             WHERE REPLACE(REPLACE(LOWER(c.name), ' ', ''), '-', '') LIKE CONCAT('%', ?, '%')
                OR REPLACE(REPLACE(LOWER(c.name_ar), ' ', ''), '-', '') LIKE CONCAT('%', ?, '%')
             LIMIT 1
@@ -166,33 +166,132 @@ async function resolveTicketCode(baseCode, courseName, pool) {
         return baseCode; // Safe fallback
     }
 }
-async function generateAiReply(text, classification, courseContext = "", requirementsContext = "") {
+// ─── Scoring Helpers ────────────────────────────────────────────────────────
+
+// Gap #1: enforce per-criterion caps before summing
+function capScore(value, max) { return Math.min(Math.max(value, 0), max); }
+
+// Gap #2: fetch historical baseline for a lead (once per ticket creation)
+async function getHistoricalBaseline(leadId, pool) {
     try {
-        console.log(`🤖 Prompting local Ollama to generate a conversational response...`);
+        // Fetch all ticket IDs for this lead first — avoid empty IN() which crashes MySQL
+        const [allTkts] = await pool.query(`SELECT id, closed, sales_level_id FROM crm_tickets WHERE crm_lead_id = ?`, [leadId]);
+        if (allTkts.length === 0) return 0; // cold lead — no history at all
+
+        const tIds = allTkts.map(t => t.id);
+        const tPH  = tIds.map(() => '?').join(',');
+
+        // Count past successful sales
+        const [soldLevels] = await pool.query(`SELECT id FROM crm_sales_ticket_levels WHERE code IN ('SOLD','POST_SALE','COMPLETED')`);
+        if (soldLevels.length > 0) {
+            const lvIds = soldLevels.map(r => r.id);
+            const salesCount = allTkts.filter(t => t.closed === 1 && lvIds.includes(t.sales_level_id)).length;
+            if (salesCount >= 3) return 60;
+            if (salesCount >= 1) return 40;
+        }
+
+        // Chronic window shopper: 5+ closed tickets that never converted
+        const [preSaleRow] = await pool.query(`SELECT id FROM crm_sales_ticket_levels WHERE code = 'PRE_SALE' LIMIT 1`);
+        const preSaleId = preSaleRow.length > 0 ? preSaleRow[0].id : null;
+        const closedNoSale = allTkts.filter(t => t.closed === 1 && (!t.sales_level_id || t.sales_level_id === preSaleId)).length;
+        if (closedNoSale >= 5) return -30;
+
+        // Refund / high-maintenance
+        const [refunds] = await pool.query(
+            `SELECT COUNT(*) as cnt FROM crm_ticket_messages WHERE crm_ticket_id IN (${tPH}) AND message_text LIKE ?`,
+            [...tIds, '%استرداد%']
+        );
+        if (refunds[0].cnt > 0) return -50;
+
+        // Discount seeker — last 3 ticket IDs
+        const recentIds = tIds.slice(-3);
+        const rPH = recentIds.map(() => '?').join(',');
+        const [discMsgs] = await pool.query(
+            `SELECT COUNT(*) as cnt FROM crm_ticket_messages WHERE crm_ticket_id IN (${rPH}) AND message_text LIKE ?`,
+            [...recentIds, '%خصم%']
+        );
+        if (discMsgs[0].cnt >= 2) return -15;
+
+        return 0;
+    } catch (e) {
+        console.error('⚠️ Historical baseline error:', e.message);
+        return 0;
+    }
+}
+
+// Gap #3: timing/velocity criterion based on last_interaction_time
+async function getTimingScore(leadId, intentScore, pool) {
+    try {
+        const [rows] = await pool.query(
+            `SELECT TIMESTAMPDIFF(MINUTE, last_interaction_time, NOW()) as mins_since FROM crm_leads WHERE id = ?`,
+            [leadId]
+        );
+        if (!rows[0] || rows[0].mins_since === null) return 0;
+        const mins = rows[0].mins_since;
+        const isBuyingIntent = intentScore >= 25; // price/payment signals
+
+        if (mins < 10)  return capScore(isBuyingIntent ? 25 : 10, 25);
+        if (mins < 60)  return capScore(isBuyingIntent ? 15 : 5,  25);
+        if (mins < 360) return capScore(isBuyingIntent ? 5  : 2,  25);
+        if (mins < 720) return capScore(isBuyingIntent ? 2  : 0,  25);
+        return -10; // > 24h cumulative penalty handled by timer decay
+    } catch (e) {
+        console.error('⚠️ Timing score error:', e.message);
+        return 0;
+    }
+}
+
+// Determine lead status label from ticket score
+function getLeadStatus(score) {
+    if (score >= 165) return 'CONFIRMED';
+    if (score >= 100) return 'HOT';
+    if (score >= 50)  return 'WARM';
+    return 'COOL';
+}
+
+// Check if message is an instructor join request (Gap #6)
+function isInstructorRequest(text) {
+    const triggers = ['أنا مدرب', 'عايز أنزل ورشة', 'عندكم نظام تعاون', 'أقدم كورس عندكم', 'ورشة عمل', 'مدرب وعايز', 'أفيدكم بورش'];
+    return triggers.some(t => text && text.includes(t));
+}
+
+// Check if message is a fallback / trust-loss signal (Gap #5 & Case 1)
+function isTrustLoss(text) {
+    const triggers = ['أنت روبوت', 'كلامك ده محفوظ', 'أديني زول', 'أتفاهم معاهو', 'ما فهمت', 'نفس الكلام'];
+    return triggers.some(t => text && text.includes(t));
+}
+
+async function generateAiReply(text, classification, courseContext = "", requirementsContext = "", ticketScore = 0) {
+    try {
+        console.log(`🤖 Prompting local Ollama to generate a conversational response (Ticket Score: ${ticketScore})...`);
         const response = await fetch('http://localhost:11434/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: OLLAMA_MODEL,
-                prompt: `You are the primary Customer Service and Technical Support AI for Afro-Tech Training Center.
-You MUST provide helpful, direct answers. You are NOT allowed to say "Contact support" because YOU ARE the support.
+                prompt: `You are a customer service specialist at Afro-Tech Training Center. Respond naturally and helpfully — never reveal you are an AI or a bot.
 
 Customer Message: "${text}"
-Routing Classification: ${classification}
+Classification: ${classification}
+Lead Status: ${getLeadStatus(ticketScore)} (Score: ${ticketScore})
 
-${courseContext ? `=== AVAILABLE COURSES CATALOG ===\n${courseContext}\n================================` : "(No specific course catalog available for this query)"}
+${courseContext ? `=== AVAILABLE COURSES CATALOG ===\n${courseContext}\n================================` : ''}
+${requirementsContext ? `=== CENTER POLICIES & FAQ ===\n${requirementsContext}\n================================` : ''}
 
-${requirementsContext ? `=== CENTER POLICIES, REGISTRATION & TECH FAQ ===\n${requirementsContext}\n================================` : "(No policy context available)"}
+BEHAVIOR BY LEAD STATUS:
+- COOL (0-49): Answer factually. Do NOT mention payment or push enrollment.
+- WARM (50-99): Highlight course benefits. Mention start date/deadline if available.
+- HOT (100-164): Gently encourage payment. Mention Bankak or Fawry from registration_methods. Ask for WhatsApp number naturally to send payment link.
+- CONFIRMED (165): Thank them warmly. Confirm enrollment steps.
 
-STRICT INSTRUCTIONS:
-1. ROLE: You are the support agent. If a user has a technical issue (login, password, video issues), use the "technical_support_faq" in the context above to solve it. 
-2. NEVER tell the user to contact another support team. If the specific issue is not in the FAQ, provide the center's contact numbers from "registration_methods" (0925777109, 0967492783) as a last resort, but first TRY to solve it.
-3. REGISTRATION: If they ask how to register, use the "registration_methods" steps.
-4. REFUNDS: If they ask about refunds, use the "refund_policy" data exactly.
-5. COURSE DETAILS: If they ask about a specific course, use the CATALOG. If not found in CATALOG, apologize and ask if they want to see other available courses.
-6. TONE: Professional, friendly, and use Sudanese Arabic dialect where appropriate (Sudanese slang).
-7. LANGUAGE: Reply in Arabic only.
-8. NO HALLUCINATION: If a price or date is not in the context, do not invent it. Say you are not sure about that specific detail.`,
+STRICT RULES:
+1. You ARE the support. Never say "contact support" — solve it yourself.
+2. Technical issues: use الدعم الفني وحلول المشاكل التقنية from context.
+3. Registration: use registration_methods steps exactly.
+4. Refunds: quote refund_policy data exactly — do not paraphrase.
+5. Course details: only use CATALOG data. Never invent prices or dates.
+6. Language: Arabic only. Sudanese dialect when appropriate.
+7. Never reveal you are AI or a bot.`,
                 stream: false
             })
         });
@@ -263,16 +362,22 @@ app.post('/api/webhook/messenger', async (req, res) => {
     const needsCourseContext = ticketCode.includes('COURSES') || ticketCode === 'GENERAL_ENQUIRY';
     const DB_ATC = process.env.DB_NAME_ATC || 'system_atc';
 
-    // Fetch dynamic requirements (policies, registration, etc.)
+    // Fetch dynamic requirements (policies, registration, etc.) and Support KB
     let requirementsContext = "";
     try {
         const [reqs] = await pool.query(`SELECT key_name, content_ar FROM crm_dynamic_requirements`);
         if (reqs.length > 0) {
-            requirementsContext = "=== سياسات ومعلومات المركز ===\n" +
-                reqs.map(r => `🔹 ${r.key_name}: ${r.content_ar}`).join("\n\n");
+            requirementsContext += "=== سياسات ومعلومات المركز ===\n" +
+                reqs.map(r => `🔹 ${r.key_name}: ${r.content_ar}`).join("\n\n") + "\n\n";
+        }
+
+        const [supportKbs] = await pool.query(`SELECT problem_title_ar, solution_ar FROM crm_support_kb`);
+        if (supportKbs.length > 0) {
+            requirementsContext += "=== الدعم الفني وحلول المشاكل التقنية (استخدمها لحل مشاكل المنصة والفيديوهات والحسابات) ===\n" +
+                supportKbs.map(s => `🔹 مشكلة (${s.problem_title_ar}): ${s.solution_ar}`).join("\n\n") + "\n\n";
         }
     } catch (reqErr) {
-        console.error('⚠️ Failed to pull dynamic requirements:', reqErr.message);
+        console.error('⚠️ Failed to pull dynamic requirements or support kb:', reqErr.message);
     }
 
     if (needsCourseContext) {
@@ -296,9 +401,9 @@ app.post('/api/webhook/messenger', async (req, res) => {
                     DATE_FORMAT(rc.finish_time, '%Y-%m-%d')                     AS end_date,
                     IF(rc.room_id IS NULL, 'أونلاين', 'حضورياً في المركز')     AS delivery_method,
                     COALESCE(u.descr_ar, u.descr)                               AS trainer_description
-                FROM ${DB_ATC}.running_courses rc
-                JOIN ${DB_ATC}.courses c ON rc.course_id = c.id
-                LEFT JOIN ${DB_ATC}.users u ON rc.trainer_id = u.id
+                FROM \`${DB_ATC}\`.running_courses rc
+                JOIN \`${DB_ATC}\`.courses c ON rc.course_id = c.id
+                LEFT JOIN \`${DB_ATC}\`.users u ON rc.trainer_id = u.id
                 WHERE rc.start_time > NOW() AND rc.cancelled = 0
                 ORDER BY rc.start_time ASC
                 LIMIT 10
@@ -348,8 +453,6 @@ app.post('/api/webhook/messenger', async (req, res) => {
         }
     }
 
-    const aiReply = await generateAiReply(text, ticketCode, courseContext, requirementsContext);
-
     if (!platform_user_id || !text) {
         return res.status(400).json({ error: 'Missing platform_user_id or text payload.' });
     }
@@ -389,7 +492,7 @@ app.post('/api/webhook/messenger', async (req, res) => {
 
         // 3. Fetch All Open Tickets for the Lead
         let [openTickets] = await pool.query(`
-            SELECT t.id, t.crm_ticket_type_id, t.sales_level_id, t.running_program_id, tt.code as ticket_type_code
+            SELECT t.id, t.score, t.crm_ticket_type_id, t.sales_level_id, t.running_program_id, tt.code as ticket_type_code
             FROM crm_tickets t
             JOIN crm_ticket_types tt ON t.crm_ticket_type_id = tt.id
             WHERE t.crm_lead_id = ? AND t.closed = 0
@@ -402,96 +505,123 @@ app.post('/api/webhook/messenger', async (req, res) => {
         const techTicket = openTickets.find(t => t.ticket_type_code === 'TECHNICAL_SUPPORT' || t.crm_ticket_type_id === 25);
         const postSaleTicket = openTickets.find(t => t.ticket_type_code === 'POST_SALE_FOLLOWUP');
 
-        // 4. Scoring Logic (Section 4)
-        let scoreModifier = 0;
+        // ── SCORING ENGINE (6 Criteria with per-criterion caps) ─────────────────
         let transferToHuman = false;
         let forceClose = false;
         let ticketScoreZero = false;
+        let currentTicketScore = 0;
 
-        // A. Platform & Intent
-        if (ticketCode !== 'GENERAL_ENQUIRY') scoreModifier += 10;
-        if (platform === 'whatsapp') scoreModifier += 25;
-        else if (platform === 'tiktok' || platform === 'instagram') scoreModifier += 10;
+        // === Human Handover Detection (must run first, before scoring) ===
+        // Case 1: Trust loss / anger
+        if (isTrustLoss(text)) { transferToHuman = true; }
+        // Case 2: B2B / Corporation
+        if (ticketCode.includes('CORPORATION') || (text && (text.includes('شركتنا') || text.includes('موظفين') || text.includes('عرض سعر رسمي')))) { transferToHuman = true; }
+        // Case 4: Instructor join request
+        if (isInstructorRequest(text)) { transferToHuman = true; }
 
-        // B. Reactions
+        // === Criterion 1: Platform Score (max 25) ===
+        let platformPts = 0;
+        const platStr = (platform || '').toLowerCase();
+        if (platStr === 'whatsapp' || platStr === 'telegram' || platStr === 'pstn') platformPts = 25;
+        else if (interaction_type === 'message') platformPts = 15;  // DM on FB/IG/TT
+        else platformPts = 10;  // comment
+        platformPts = capScore(platformPts, 25);
+
+        // === Criterion 2: Intent Score (max 50) — mapped from AI raw 0-100 ===
+        // buying signal phrases override AI score
+        const BUYING_SIGNALS   = ['رقم الحساب', 'ادفع كيف', 'رابط التسجيل', 'بنكك', 'خلاص سجلني', 'اعتمد'];
+        const CONFIRM_SIGNALS  = ['خلاص تمام', 'سجلني', 'موافق', 'حجز'];
+        const PRICE_SIGNALS    = ['بكم', 'السعر', 'خصم', 'كود', 'تقسيط', 'طرق الدفع', 'في خصم'];
+        const VALID_SIGNALS    = ['طيب جميل', 'واضح', 'ممتاز', 'التسجيل', 'الرابط'];
+        const LOGISTICS_SIGNALS = ['متى يبدأ', 'كم المدة', 'حضوري', 'أونلاين', 'منو المدرب', 'أيام الكورس'];
+
+        let intentPts = 0;
+        if (BUYING_SIGNALS.some(s => text && text.includes(s)))   intentPts = 50;
+        else if (CONFIRM_SIGNALS.some(s => text && text.includes(s)))  intentPts = 25;
+        else if (PRICE_SIGNALS.some(s => text && text.includes(s)))    intentPts = 25;
+        else if (VALID_SIGNALS.some(s => text && text.includes(s)))    intentPts = 15;
+        else if (LOGISTICS_SIGNALS.some(s => text && text.includes(s))) intentPts = 5;
+        else intentPts = Math.round((computedScore / 100) * 10); // fallback: map AI score to max 10
+        intentPts = capScore(intentPts, 50);
+
+        // === Criterion 3: Timing/Velocity (max 25) ===
+        const timingPts = capScore(await getTimingScore(leadId, intentPts, pool), 25);
+
+        // === Criterion 4: Historical Baseline (max ±60) ===
+        const historyPts = await getHistoricalBaseline(leadId, pool);
+
+        // === Criterion 5: Reaction (max ±5) ===
+        let reactionPts = 0;
         if (interaction_type === 'reaction') {
-            if (['❤️', '👍', '😲', '😍'].includes(text)) scoreModifier += 5;
-            if (['😡', '😢', '👎', '😠'].includes(text)) scoreModifier -= 5;
+            if (['❤️', '👍', '😲', '😍'].includes(text)) reactionPts = capScore(5, 5);
+            if (['😡', '😢', '👎', '😠'].includes(text)) reactionPts = -5;
         }
 
-        // C. B2B Companies
-        if (ticketCode.includes('CORPORATION') || (text && (text.includes('شركتنا') || text.includes('موظفين')))) {
-            transferToHuman = true;
-        }
-
-        // D. Deductions
+        // === Criterion 6: Deductions ===
+        let deductionPts = 0;
         if (text) {
-            if (text.includes('غالي')) scoreModifier -= 15;
-            if (text.includes('ما عايز') || text.includes('لا اريد') || text.includes('لا أريد')) {
+            if (text.includes('غالي') || text.includes('ما عندي ميزانية') || text.includes('أرخص'))  deductionPts -= 15;
+            if (text.includes('سأرد لاحقاً') || text.includes('بشوف'))  deductionPts -= 30;
+            if (text.includes('ما عايز') || text.includes('لا اريد') || text.includes('لا أريد') || text.includes('غير مهتم') || text.includes('احذف رقمي')) {
                 ticketScoreZero = true;
                 forceClose = true;
             }
         }
 
-        let messageCount = 0;
-        if (salesTicket) {
-            const [msgCountResult] = await pool.query('SELECT COUNT(*) as cnt FROM crm_ticket_messages WHERE crm_ticket_id = ?', [salesTicket.id]);
-            messageCount = msgCountResult[0].cnt;
+        // === Final Score (natural sum, floor 0) ===
+        let messageScoreDelta = platformPts + intentPts + timingPts + reactionPts + deductionPts;
+        // NOTE: historyPts is baseline applied once at ticket creation, not per-message
 
-            // E. Message Volume Modifier
-            if (messageCount < 5 && text && (text.includes('رقم الحساب') || text.includes('الدفع') || text.includes('بنكك') || text.includes('دفع'))) {
-                scoreModifier += 15;
-            }
-            if (messageCount > 15 && salesTicket.ticket_type_code && salesTicket.ticket_type_code.includes('COURSES')) {
-                scoreModifier -= 2;
-            }
-        }
-
-        let finalComputedScore = computedScore + scoreModifier;
-        if (ticketScoreZero) finalComputedScore = 0;
+        console.log(`📊 Score breakdown → Platform:${platformPts} Intent:${intentPts} Timing:${timingPts} History:${historyPts} Reaction:${reactionPts} Deductions:${deductionPts}`);
 
         let ticketId = null;
         let actionTaken = '';
         let timerType = null;
         let timerMinutes = 1435;
 
+        // === Case 3: Fallback counter check (Gap #5) ===
+        if (salesTicket && ticketCode === 'GENERAL_ENQUIRY') {
+            await pool.query(`UPDATE crm_tickets SET fallback_count = fallback_count + 1, updated = NOW() WHERE id = ?`, [salesTicket.id]);
+            const [fbRow] = await pool.query(`SELECT fallback_count FROM crm_tickets WHERE id = ?`, [salesTicket.id]);
+            if (fbRow[0].fallback_count >= 3) { transferToHuman = true; } // Case 3: fallback loop
+        }
+
         // 5. Ticket routing cases logic
-        if (ticketCode.startsWith('DEEP_INFO') || ticketCode.startsWith('PERSONAL') || ticketCode.startsWith('CORPORATION')) {
-            // Case B - Sales Ticket Logic
+        const isSaleCode = ticketCode.startsWith('DEEP_INFO') || ticketCode.startsWith('PERSONAL') || ticketCode.startsWith('CORPORATION');
+
+        if ((salesTicket && ticketCode !== 'COMPLAINT' && ticketCode !== 'TECHNICAL_SUPPORT') || isSaleCode) {
             if (salesTicket) {
                 ticketId = salesTicket.id;
-                let updatedScore = (salesTicket.score || 0) + finalComputedScore;
+                // Accumulate score on existing ticket (history already baked in from creation)
+                let updatedScore = Math.max(0, (salesTicket.score || 0) + messageScoreDelta);
                 if (ticketScoreZero) updatedScore = 0;
-                if (updatedScore > 100) updatedScore = 100;
-                if (updatedScore < 0) updatedScore = 0;
-                
-                let closeQuery = forceClose ? ', closed = 1' : '';
-                await pool.query(`UPDATE crm_tickets SET score = ?, transfer_to_human = GREATEST(transfer_to_human, ?) ${closeQuery}, updated = NOW() WHERE id = ?`, [updatedScore, transferToHuman ? 1 : 0, ticketId]);
 
-                if (ai_program_id && salesTicket.running_program_id !== ai_program_id) {
+                currentTicketScore = updatedScore;
+
+                let closeQuery = forceClose ? ', closed = 1' : '';
+                await pool.query(`UPDATE crm_tickets SET score = ?, transfer_to_human = GREATEST(transfer_to_human, ?) ${closeQuery}, updated = NOW() WHERE id = ?`,
+                    [updatedScore, transferToHuman ? 1 : 0, ticketId]);
+
+                if (ai_program_id && salesTicket.running_program_id !== ai_program_id)
                     await pool.query(`UPDATE crm_tickets SET running_program_id = ?, updated = NOW() WHERE id = ?`, [ai_program_id, ticketId]);
-                }
+
                 actionTaken = forceClose ? 'CLOSED_SALES_TICKET_REJECTION' : 'UPDATED_SALES_TICKET';
 
-                // F. Hot Leads Notification
-                if (updatedScore >= 70 && !forceClose) {
-                    console.log(`🔥 HOT LEAD DETECTED! Ticket ID: ${ticketId}, Score: ${updatedScore}`);
-                }
+                const status = getLeadStatus(updatedScore);
+                if (status === 'HOT' || status === 'CONFIRMED') console.log(`🔥 ${status} LEAD! Ticket:${ticketId} Score:${updatedScore}`);
 
             } else {
-                // Case A - Create new sales ticket
+                // New sales ticket — apply history baseline to initial score
                 const [typeRes] = await pool.query(`SELECT id FROM crm_ticket_types WHERE code = ? LIMIT 1`, [ticketCode]);
-                const typeId = typeRes.length > 0 ? typeRes[0].id : 1; // Default fallback to 1
-
+                const typeId = typeRes.length > 0 ? typeRes[0].id : 1;
                 let [preSaleLevel] = await pool.query(`SELECT id FROM crm_sales_ticket_levels WHERE code = 'PRE_SALE' LIMIT 1`);
                 const preSaleLevelId = preSaleLevel.length > 0 ? preSaleLevel[0].id : 1;
-                
-                let initialScore = finalComputedScore;
-                if (initialScore > 100) initialScore = 100;
-                if (initialScore < 0) initialScore = 0;
+
+                let initialScore = Math.max(0, messageScoreDelta + historyPts);
+                currentTicketScore = initialScore;
 
                 const [newTicket] = await pool.query(
-                    `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, sales_level_id, title, running_program_id, running_program_type, score, transfer_to_human, closed, created, updated) 
+                    `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, sales_level_id, title, running_program_id, running_program_type, score, transfer_to_human, closed, created, updated)
                      VALUES (?, ?, ?, ?, ?, 'Course', ?, ?, ?, NOW(), NOW())`,
                     [leadId, typeId, preSaleLevelId, `مبيعات — ${ticketCode}`, ai_program_id, initialScore, transferToHuman ? 1 : 0, forceClose ? 1 : 0]
                 );
@@ -504,13 +634,16 @@ app.post('/api/webhook/messenger', async (req, res) => {
         } else if (ticketCode === 'COMPLAINT') {
             if (complaintTicket) {
                 ticketId = complaintTicket.id;
+                currentTicketScore = complaintTicket.score || 0;
                 actionTaken = 'UPDATED_COMPLAINT_TICKET';
             } else {
+                const initScore = Math.max(0, messageScoreDelta);
                 const [newTicket] = await pool.query(
                     `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, score, created, updated) VALUES (?, 26, ?, ?, NOW(), NOW())`,
-                    [leadId, `شكوى — ${new Date().toISOString().slice(0,10)}`, finalComputedScore]
+                    [leadId, `شكوى — ${new Date().toISOString().slice(0,10)}`, initScore]
                 );
                 ticketId = newTicket.insertId;
+                currentTicketScore = initScore;
                 actionTaken = 'CREATED_COMPLAINT_TICKET';
             }
             timerType = 'COMPLAINT_FOLLOWUP';
@@ -519,13 +652,16 @@ app.post('/api/webhook/messenger', async (req, res) => {
         } else if (ticketCode === 'TECHNICAL_SUPPORT') {
             if (techTicket) {
                 ticketId = techTicket.id;
+                currentTicketScore = techTicket.score || 0;
                 actionTaken = 'UPDATED_TECH_TICKET';
             } else {
+                const initScore = Math.max(0, messageScoreDelta);
                 const [newTicket] = await pool.query(
                     `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, score, created, updated) VALUES (?, 25, ?, ?, NOW(), NOW())`,
-                    [leadId, `دعم فني — ${new Date().toISOString().slice(0,10)}`, finalComputedScore]
+                    [leadId, `دعم فني — ${new Date().toISOString().slice(0,10)}`, initScore]
                 );
                 ticketId = newTicket.insertId;
+                currentTicketScore = initScore;
                 actionTaken = 'CREATED_TECH_TICKET';
             }
             timerType = 'TECHNICAL_SUPPORT_FOLLOWUP';
@@ -543,11 +679,19 @@ app.post('/api/webhook/messenger', async (req, res) => {
             actionTaken = 'CREATED_OUT_OF_PLAN_TICKET_NO_TIMER';
 
         } else {
-            // Case D or general interaction on an existing ticket
-            if (salesTicket) ticketId = salesTicket.id;
-            else if (techTicket) ticketId = techTicket.id;
-            else if (complaintTicket) ticketId = complaintTicket.id;
-            else if (postSaleTicket) ticketId = postSaleTicket.id;
+            // For GENERAL_ENQUIRY: reflect existing ticket score so status is accurate
+            if (salesTicket) {
+                ticketId = salesTicket.id;
+                currentTicketScore = salesTicket.score || 0;
+            } else if (techTicket) {
+                ticketId = techTicket.id;
+                currentTicketScore = techTicket.score || 0;
+            } else if (complaintTicket) {
+                ticketId = complaintTicket.id;
+                currentTicketScore = complaintTicket.score || 0;
+            } else if (postSaleTicket) {
+                ticketId = postSaleTicket.id;
+            }
 
             actionTaken = ticketId ? 'LOGGED_TO_EXISTING_TICKET' : 'GENERAL_ENQUIRY_NO_TICKET';
         }
@@ -563,6 +707,8 @@ app.post('/api/webhook/messenger', async (req, res) => {
             );
         }
 
+        const aiReply = await generateAiReply(text, ticketCode, courseContext, requirementsContext, currentTicketScore);
+
         // 7. Log the Customer Message
         await pool.query(
             `INSERT INTO crm_ticket_messages (crm_ticket_id, platform, interaction_type, message_text, attachment_url, router_value, sender_type, created) 
@@ -573,6 +719,7 @@ app.post('/api/webhook/messenger', async (req, res) => {
         const duration = ((Date.now() - startTime) / 1000).toFixed(3);
         console.log(`⏱️ AI Processing took ${duration} seconds`);
 
+
         res.json({
             status: "SUCCESS",
             lead_id: leadId,
@@ -580,7 +727,9 @@ app.post('/api/webhook/messenger', async (req, res) => {
             action: actionTaken,
             resolved_ticket_type: ticketCode,
             extracted_course_name: extractedCourseName || null,
-            ai_score_recorded: computedScore,
+            ticket_score: currentTicketScore,
+            lead_status: getLeadStatus(currentTicketScore),
+            transfer_to_human: transferToHuman,
             ai_reply: aiReply,
             timer_created: timerType ? true : false,
             message_logged: text
