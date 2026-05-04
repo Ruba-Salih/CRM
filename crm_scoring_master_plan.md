@@ -159,41 +159,23 @@ When ticket score ≥ 100 (Hot):
 
 ---
 
-## Part 3 — Support Ticket Scoring (Urgency Model)
+---
 
-Support tickets do NOT measure purchase intent. They measure **how urgent the unresolved issue is**.
+## Part 3 — Support & Complaint Tickets (NO SCORING)
 
-| Criterion | Max |
-|---|:---:|
-| AI Severity Assessment (mapped 0–40) | 40 |
-| Time Open Without Resolution (+=10 per 4h, max 30) | 30 |
-| Repeated Contact (same issue re-opened) | 20 |
-| Frustration Sentiment (AI-detected) | 10 |
-| **Total Max** | **100** |
+As per the revised core principle, **Support and Complaint tickets do not use a scoring model**. 
 
-- Score **increases over time** (growing urgency) unlike sales.
-- Score **resets to 0** on resolution.
-- **No human handover** unless one of the 4 explicit cases in `scoring.txt` is triggered (see Part 5).
+- **Purpose:** These tickets are for issue resolution and service quality tracking, not purchase intent measurement.
+- **Score Value:** Always remains **0**.
+- **AI Behavior:** Driven entirely by the Knowledge Base (`crm_support_kb`) and the specific intent detection, not by a numerical score.
+- **Human Handover:** Only triggered by the explicit cases defined in Part 4.
+- **Close Condition:**
+    - **Support:** Resolved by AI or Human.
+    - **Complaint:** Customer explicitly satisfied or silence for 8h (assumed resolved).
 
 ---
 
-## Part 4 — Complaint Ticket Scoring (Risk/Damage Model)
-
-| Criterion | Max |
-|---|:---:|
-| AI Tone Severity (mild dissatisfaction → public threat) | 40 |
-| Platform Visibility (private DM=10, public post/comment=25) | 25 |
-| Loyal Customer Complaining (paid before = +20, cold = +5) | 20 |
-| Repeat Complaint (same customer before) | 15 |
-| **Total Max** | **100** |
-
-- **No score decay** — complaint stays urgent until resolved.
-- Close condition: customer says resolved, OR silence for 8h (auto-close as "assumed resolved").
-- **No human handover** unless explicit cases trigger (Part 5).
-
----
-
-## Part 5 — Human Handover (EXACTLY 4 Cases — No More)
+## Part 4 — Human Handover (EXACTLY 4 Cases — No More)
 
 Human handover is triggered **only** when one of these is detected. In all other cases, the AI handles autonomously.
 
@@ -202,13 +184,13 @@ Human handover is triggered **only** when one of these is detected. In all other
 | 1 | **Trust Loss / Anger** | AI detects phrases like "أنت روبوت؟"، "كلامك ده محفوظ"، "أديني زول أتفاهم معاهو" |
 | 2 | **B2B / Corporation Sale** | Ticket code is `CORPORATION_*` OR text contains "شركتنا"، "موظفين"، "عرض سعر رسمي"، "مقر شركتنا" |
 | 3 | **Fallback Loop Limit** | Same user sends 3+ messages that the AI could not answer meaningfully (detected via fallback counter per ticket) |
-| 4 | **Instructor Join Request** | Text contains "أنا مدرب"، "أقدم كورس عندكم"، "نظام تعاون مع مدربين"، "ورشة عمل" |
+| 4 | **Instructor Join Request** | Ticket code `TRAINER_APPLICATION` OR text like "أنا مدرب". **Flow:** 1. AI asks for ability/qualifications. 2. Upon response, AI confirms review and then sets `transfer_to_human = 1`. |
 
 **Action:** Set `transfer_to_human = 1` on the ticket. Log reason internally. The AI sends **no message announcing the transfer** — the customer must never feel they are being handed off to another team or that they were talking to a bot. The AI simply goes silent after its last natural reply, and a human agent picks up the conversation seamlessly from the ticket queue.
 
 ---
 
-## Part 6 — Post-Sale Follow-up (NO SCORE)
+## Part 5 — Post-Sale Follow-up (NO SCORE)
 
 This is a **pure scheduled automation**. No scoring involved. Three timed messages only:
 
@@ -224,18 +206,18 @@ This is a **pure scheduled automation**. No scoring involved. Three timed messag
 
 ---
 
-## Part 7 — Timer & Score Decay
+## Part 6 — Timer & Score Decay
 
 | Ticket Type | Timer Interval | Decay on No Response |
 |---|:---:|---|
 | Sales (`PRE_SALE`) | 24h | -10 per 24h of silence. Zero → close as "lost". |
-| Support | 4h | Urgency INCREASES +10 per 4h open (inverse decay). |
-| Complaint | None | No decay — stays urgent until resolved. |
+| Support | 4h | No decay. |
+| Complaint | None | No decay. |
 | Post-Sale | Scheduled (3 total) | No decay. Cancel on rejection signal. |
 
 ---
 
-## Part 8 — Implementation Gaps to Fill (Priority Order)
+## Part 7 — Implementation Gaps to Fill (Priority Order)
 
 | Priority | Gap | Action Needed |
 |:---:|---|---|

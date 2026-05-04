@@ -48,6 +48,7 @@ Based on the customer message below, perform THREE tasks:
    CORPORATION_ONLINE_COURSES  — company wants online/remote courses OR company does not specify
    COMPLAINT
    TECHNICAL_SUPPORT
+   TRAINER_APPLICATION       — user wants to join as a trainer/instructor
    GENERAL_ENQUIRY
 
    RULE A: If the user or their company mentions any specific course topic (e.g., Python, AI, Sales, Marketing, Mobile), classify as the matching COURSES code. NEVER use GENERAL_ENQUIRY for course-related messages.
@@ -92,7 +93,7 @@ Customer Message: "${text}"`,
             }
         } catch (e) {
             console.log('⚠️ Failed to parse classification JSON, defaulting');
-            const match = rawText.match(/(PERSONAL_OFFLINE_COURSES|PERSONAL_ONLINE_COURSES|CORPORATION_OFFLINE_COURSES|CORPORATION_ONLINE_COURSES|COMPLAINT|TECHNICAL_SUPPORT|GENERAL_ENQUIRY)/);
+            const match = rawText.match(/(PERSONAL_OFFLINE_COURSES|PERSONAL_ONLINE_COURSES|CORPORATION_OFFLINE_COURSES|CORPORATION_ONLINE_COURSES|COMPLAINT|TECHNICAL_SUPPORT|TRAINER_APPLICATION|GENERAL_ENQUIRY)/);
             if (match) resultJson.code = match[1];
         }
 
@@ -291,7 +292,10 @@ STRICT RULES:
 4. Refunds: quote refund_policy data exactly — do not paraphrase.
 5. Course details: only use CATALOG data. Never invent prices or dates.
 6. Language: Arabic only. Sudanese dialect when appropriate.
-7. Never reveal you are AI or a bot.`,
+7. Never reveal you are AI or a bot.
+8. Trainer Applications (TRAINER_APPLICATION):
+   - Step 1 (First contact): Welcome them warmly to Afro-Tech. Ask them about their specialization, ability, capability, and to provide their CV or a summary of their previous training experience.
+   - Step 2 (After they provide info): Thank them for the information. Tell them that their application will be reviewed by the specialized department and we will get back to them soon. (Note: The system will then smoothly handle the human handover).`,
                 stream: false
             })
         });
@@ -503,6 +507,7 @@ app.post('/api/webhook/messenger', async (req, res) => {
         const salesTicket = openTickets.find(t => (t.crm_ticket_type_id >= 1 && t.crm_ticket_type_id <= 24) || t.ticket_type_code.startsWith('PERSONAL') || t.ticket_type_code.startsWith('CORPORATION'));
         const complaintTicket = openTickets.find(t => t.ticket_type_code === 'COMPLAINT' || t.crm_ticket_type_id === 26);
         const techTicket = openTickets.find(t => t.ticket_type_code === 'TECHNICAL_SUPPORT' || t.crm_ticket_type_id === 25);
+        const trainerTicket = openTickets.find(t => t.ticket_type_code === 'TRAINER_APPLICATION' || t.crm_ticket_type_id === 45);
         const postSaleTicket = openTickets.find(t => t.ticket_type_code === 'POST_SALE_FOLLOWUP');
 
         // ── SCORING ENGINE (6 Criteria with per-criterion caps) ─────────────────
@@ -517,7 +522,11 @@ app.post('/api/webhook/messenger', async (req, res) => {
         // Case 2: B2B / Corporation
         if (ticketCode.includes('CORPORATION') || (text && (text.includes('شركتنا') || text.includes('موظفين') || text.includes('عرض سعر رسمي')))) { transferToHuman = true; }
         // Case 4: Instructor join request
-        if (isInstructorRequest(text)) { transferToHuman = true; }
+        if (isInstructorRequest(text) || ticketCode === 'TRAINER_APPLICATION') { 
+            ticketCode = 'TRAINER_APPLICATION';
+            // We only set transferToHuman if we already have a trainer ticket (meaning this is the follow-up)
+            if (trainerTicket) transferToHuman = true; 
+        }
 
         // === Criterion 1: Platform Score (max 25) ===
         let platformPts = 0;
@@ -634,10 +643,10 @@ app.post('/api/webhook/messenger', async (req, res) => {
         } else if (ticketCode === 'COMPLAINT') {
             if (complaintTicket) {
                 ticketId = complaintTicket.id;
-                currentTicketScore = complaintTicket.score || 0;
+                currentTicketScore = 0; // No scoring for Complaints
                 actionTaken = 'UPDATED_COMPLAINT_TICKET';
             } else {
-                const initScore = Math.max(0, messageScoreDelta);
+                const initScore = 0; // No scoring for Complaints
                 const [newTicket] = await pool.query(
                     `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, score, created, updated) VALUES (?, 26, ?, ?, NOW(), NOW())`,
                     [leadId, `شكوى — ${new Date().toISOString().slice(0,10)}`, initScore]
@@ -652,10 +661,10 @@ app.post('/api/webhook/messenger', async (req, res) => {
         } else if (ticketCode === 'TECHNICAL_SUPPORT') {
             if (techTicket) {
                 ticketId = techTicket.id;
-                currentTicketScore = techTicket.score || 0;
+                currentTicketScore = 0; // No scoring for Support
                 actionTaken = 'UPDATED_TECH_TICKET';
             } else {
-                const initScore = Math.max(0, messageScoreDelta);
+                const initScore = 0; // No scoring for Support
                 const [newTicket] = await pool.query(
                     `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, score, created, updated) VALUES (?, 25, ?, ?, NOW(), NOW())`,
                     [leadId, `دعم فني — ${new Date().toISOString().slice(0,10)}`, initScore]
@@ -666,6 +675,23 @@ app.post('/api/webhook/messenger', async (req, res) => {
             }
             timerType = 'TECHNICAL_SUPPORT_FOLLOWUP';
             timerMinutes = technicalMinutes;
+
+        } else if (ticketCode === 'TRAINER_APPLICATION') {
+            if (trainerTicket) {
+                ticketId = trainerTicket.id;
+                currentTicketScore = 0;
+                actionTaken = 'UPDATED_TRAINER_APPLICATION';
+            } else {
+                const [newTicket] = await pool.query(
+                    `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, score, created, updated) VALUES (?, 45, ?, 0, NOW(), NOW())`,
+                    [leadId, `طلب انضمام مدرب — ${new Date().toISOString().slice(0,10)}`]
+                );
+                ticketId = newTicket.insertId;
+                currentTicketScore = 0;
+                actionTaken = 'CREATED_TRAINER_APPLICATION';
+            }
+            timerType = 'TRAINER_FOLLOWUP';
+            timerMinutes = 1440; // 24h
 
         } else if (ticketCode.startsWith('OUT_OF_PLAN') || ticketCode.startsWith('NEW_COURSE_REQUEST')) {
             const [typeRes] = await pool.query(`SELECT id FROM crm_ticket_types WHERE code = ? LIMIT 1`, [ticketCode]);
@@ -738,6 +764,19 @@ app.post('/api/webhook/messenger', async (req, res) => {
     } catch (error) {
         console.error("Database Error: ", error);
         res.status(500).json({ error: 'Database transaction failed', details: error.message });
+    }
+});
+
+app.listen(port, async () => {
+    console.log(`✅ CRM Webhook Simulator with background jobs running on http://localhost:${port}`);
+
+    // Automatically trigger ngrok tunnel exposure
+    try {
+        const ngrok = require('@ngrok/ngrok');
+        const tunnel = await ngrok.forward({ addr: port, authtoken: process.env.NGROK_AUTHTOKEN });
+        console.log(`🌍 ngrok tunnel opened at: ${tunnel.url()}`);
+    } catch (err) {
+        console.error('⚠️ Could not establish ngrok tunnel:', err.message);
     }
 });
 

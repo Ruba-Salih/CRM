@@ -118,12 +118,9 @@ INSERT IGNORE INTO `atc_config` (`title`, `value`) VALUES
 ('crm_technical_timer_minutes', '240'),
 ('crm_followup_timer_minutes', '1435');
 
--- 8. Clean up old crm_platforms table (Since we now use strings)
-DROP TABLE IF EXISTS `crm_platforms`;
-
 -- [من ملف migration_v3_ticketing_final.sql]
 
--- 9. Create crm_support_kb Table for Technical Support FAQ
+-- 8. Create crm_support_kb Table for Technical Support FAQ
 CREATE TABLE IF NOT EXISTS `crm_support_kb` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `problem_key` varchar(100) NOT NULL,

@@ -138,7 +138,16 @@ async function run() {
     await printDbState(r.lead_id, r.ticket_id);
 
     console.log('\n====== TEST 12: Out of Plan Course Request ======');
-    r = await post(`oop_${ts}`, 'هل عندكم كورس عن الذكاء الاصطناعي التوليدي؟');
+    r = await post(`out_${ts}`, 'عايز كورس فوتوشوب متقدم');
+    console.log(fmt(r));
+    await printDbState(r.lead_id, r.ticket_id);
+
+    console.log('\n====== TEST 13: Trainer Application Flow ======');
+    const tr = `trainer_${ts}`;
+    r = await post(tr, 'أنا مدرب جرافيك وعايز أقدم كورس عندكم');
+    console.log(fmt(r));
+    await printDbState(r.lead_id, r.ticket_id);
+    r = await post(tr, 'عندي خبرة 5 سنوات في أدوبي وأشتغلت في مراكز تدريب كتير');
     console.log(fmt(r));
     await printDbState(r.lead_id, r.ticket_id);
 

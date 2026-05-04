@@ -101,3 +101,5 @@ test case:
 افصل الsuppotr ف جدول براهو
 support + coplint = have no scoring
 whatsapp api arthurer
+
+تذكرة المدرب نقول ليهو رسل لينا مؤهلاتك و بعدي نقول ليهو ح نراجع طلبك و نتواصل معاك و نحولو لزول
