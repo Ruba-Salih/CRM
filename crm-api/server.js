@@ -331,6 +331,31 @@ const pool = mysql.createPool({
 // Start background jobs passing the DB pool
 initJobs(pool);
 
+// New endpoint to fetch social profile from local DB
+app.get('/api/profile/:platform/:userId', async (req, res) => {
+    const { platform, userId } = req.params;
+    const DB_ATC = process.env.DB_NAME_TEST4 || 'test4_atc';
+    
+    try {
+        console.log(`🔍 Fetching local profile for ${platform} user: ${userId}`);
+        const [rows] = await pool.query(
+            `SELECT username, gender, display_name, profile_pic, locale, timezone 
+             FROM \`${DB_ATC}\`.crm_lead_social_profiles 
+             WHERE platform = ? AND platform_user_id = ?`,
+            [platform, userId]
+        );
+
+        if (rows.length > 0) {
+            res.json({ status: "SUCCESS", profile: rows[0] });
+        } else {
+            res.status(404).json({ status: "NOT_FOUND", message: "Profile not found in local DB" });
+        }
+    } catch (error) {
+        console.error("Profile Fetch Error: ", error);
+        res.status(500).json({ error: 'Failed to fetch profile', details: error.message });
+    }
+});
+
 app.post('/api/webhook/messenger', async (req, res) => {
     console.log(`📩 Incoming request from ${req.body.platform_user_id}: ${req.body.text}`);
     const startTime = Date.now();
@@ -413,11 +438,6 @@ app.post('/api/webhook/messenger', async (req, res) => {
                 LIMIT 10
             `);
 
-            for (let c of courses) {
-                c.outcomesList = [];
-                c.outlinesList = [];
-            }
-
             if (courses.length > 0) {
                 courseContext = "=== الدورات المتاحة حالياً ===\n" +
                     courses.map(c => {
@@ -435,14 +455,7 @@ app.post('/api/webhook/messenger', async (req, res) => {
                         if (c.group_alias) info += `\n   المجموعة: ${c.group_alias}`;
                         if (c.description) info += `\n   الوصف: ${c.description}`;
                         if (c.short_description) info += `\n   ملخص: ${c.short_description}`;
-                        if (c.outcomesList && c.outcomesList.length > 0) {
-                            info += `\n   ماذا ستتعلم:\n     • ` + c.outcomesList.join('\n     • ');
-                        }
-                        if (c.outlinesList && c.outlinesList.length > 0) {
-                            info += `\n   المحاور الرئيسية:\n     • ` + c.outlinesList.join('\n     • ');
-                        }
                         if (c.trainer_description) {
-                            // Trim and clean up the description for the AI
                             let cleanTrainerDesc = c.trainer_description.replace(/<[^>]+>/g, '').replace(/\n+/g, ' ').trim();
                             info += `\n   معلومات المدرب: ${cleanTrainerDesc}`;
                         }
@@ -503,292 +516,124 @@ app.post('/api/webhook/messenger', async (req, res) => {
             ORDER BY t.created DESC
         `, [leadId]);
 
-        // Find existing ticket types
         const salesTicket = openTickets.find(t => (t.crm_ticket_type_id >= 1 && t.crm_ticket_type_id <= 24) || t.ticket_type_code.startsWith('PERSONAL') || t.ticket_type_code.startsWith('CORPORATION'));
         const complaintTicket = openTickets.find(t => t.ticket_type_code === 'COMPLAINT' || t.crm_ticket_type_id === 26);
         const techTicket = openTickets.find(t => t.ticket_type_code === 'TECHNICAL_SUPPORT' || t.crm_ticket_type_id === 25);
         const trainerTicket = openTickets.find(t => t.ticket_type_code === 'TRAINER_APPLICATION' || t.crm_ticket_type_id === 45);
         const postSaleTicket = openTickets.find(t => t.ticket_type_code === 'POST_SALE_FOLLOWUP');
 
-        // ── SCORING ENGINE (6 Criteria with per-criterion caps) ─────────────────
         let transferToHuman = false;
         let forceClose = false;
         let ticketScoreZero = false;
         let currentTicketScore = 0;
 
-        // === Human Handover Detection (must run first, before scoring) ===
-        // Case 1: Trust loss / anger
         if (isTrustLoss(text)) { transferToHuman = true; }
-        // Case 2: B2B / Corporation
         if (ticketCode.includes('CORPORATION') || (text && (text.includes('شركتنا') || text.includes('موظفين') || text.includes('عرض سعر رسمي')))) { transferToHuman = true; }
-        // Case 4: Instructor join request
         if (isInstructorRequest(text) || ticketCode === 'TRAINER_APPLICATION') { 
             ticketCode = 'TRAINER_APPLICATION';
-            // We only set transferToHuman if we already have a trainer ticket (meaning this is the follow-up)
             if (trainerTicket) transferToHuman = true; 
         }
 
-        // === Criterion 1: Platform Score (max 25) ===
-        let platformPts = 0;
-        const platStr = (platform || '').toLowerCase();
-        if (platStr === 'whatsapp' || platStr === 'telegram' || platStr === 'pstn') platformPts = 25;
-        else if (interaction_type === 'message') platformPts = 15;  // DM on FB/IG/TT
-        else platformPts = 10;  // comment
-        platformPts = capScore(platformPts, 25);
-
-        // === Criterion 2: Intent Score (max 50) — mapped from AI raw 0-100 ===
-        // buying signal phrases override AI score
-        const BUYING_SIGNALS   = ['رقم الحساب', 'ادفع كيف', 'رابط التسجيل', 'بنكك', 'خلاص سجلني', 'اعتمد'];
-        const CONFIRM_SIGNALS  = ['خلاص تمام', 'سجلني', 'موافق', 'حجز'];
-        const PRICE_SIGNALS    = ['بكم', 'السعر', 'خصم', 'كود', 'تقسيط', 'طرق الدفع', 'في خصم'];
-        const VALID_SIGNALS    = ['طيب جميل', 'واضح', 'ممتاز', 'التسجيل', 'الرابط'];
-        const LOGISTICS_SIGNALS = ['متى يبدأ', 'كم المدة', 'حضوري', 'أونلاين', 'منو المدرب', 'أيام الكورس'];
-
+        let platformPts = (platform === 'whatsapp' || platform === 'telegram') ? 25 : (interaction_type === 'message' ? 15 : 10);
         let intentPts = 0;
-        if (BUYING_SIGNALS.some(s => text && text.includes(s)))   intentPts = 50;
-        else if (CONFIRM_SIGNALS.some(s => text && text.includes(s)))  intentPts = 25;
-        else if (PRICE_SIGNALS.some(s => text && text.includes(s)))    intentPts = 25;
-        else if (VALID_SIGNALS.some(s => text && text.includes(s)))    intentPts = 15;
-        else if (LOGISTICS_SIGNALS.some(s => text && text.includes(s))) intentPts = 5;
-        else intentPts = Math.round((computedScore / 100) * 10); // fallback: map AI score to max 10
-        intentPts = capScore(intentPts, 50);
+        if (['رقم الحساب', 'ادفع كيف', 'رابط التسجيل', 'بنكك', 'خلاص سجلني', 'اعتمد'].some(s => text && text.includes(s))) intentPts = 50;
+        else intentPts = Math.min(50, Math.round((computedScore / 100) * 50));
 
-        // === Criterion 3: Timing/Velocity (max 25) ===
         const timingPts = capScore(await getTimingScore(leadId, intentPts, pool), 25);
-
-        // === Criterion 4: Historical Baseline (max ±60) ===
         const historyPts = await getHistoricalBaseline(leadId, pool);
 
-        // === Criterion 5: Reaction (max ±5) ===
-        let reactionPts = 0;
-        if (interaction_type === 'reaction') {
-            if (['❤️', '👍', '😲', '😍'].includes(text)) reactionPts = capScore(5, 5);
-            if (['😡', '😢', '👎', '😠'].includes(text)) reactionPts = -5;
-        }
-
-        // === Criterion 6: Deductions ===
-        let deductionPts = 0;
-        if (text) {
-            if (text.includes('غالي') || text.includes('ما عندي ميزانية') || text.includes('أرخص'))  deductionPts -= 15;
-            if (text.includes('سأرد لاحقاً') || text.includes('بشوف'))  deductionPts -= 30;
-            if (text.includes('ما عايز') || text.includes('لا اريد') || text.includes('لا أريد') || text.includes('غير مهتم') || text.includes('احذف رقمي')) {
-                ticketScoreZero = true;
-                forceClose = true;
-            }
-        }
-
-        // === Final Score (natural sum, floor 0) ===
-        let messageScoreDelta = platformPts + intentPts + timingPts + reactionPts + deductionPts;
-        // NOTE: historyPts is baseline applied once at ticket creation, not per-message
-
-        console.log(`📊 Score breakdown → Platform:${platformPts} Intent:${intentPts} Timing:${timingPts} History:${historyPts} Reaction:${reactionPts} Deductions:${deductionPts}`);
+        let messageScoreDelta = capScore(platformPts, 25) + capScore(intentPts, 50) + timingPts;
+        if (text && (text.includes('لا اريد') || text.includes('غير مهتم'))) { ticketScoreZero = true; forceClose = true; }
 
         let ticketId = null;
         let actionTaken = '';
         let timerType = null;
         let timerMinutes = 1435;
 
-        // === Case 3: Fallback counter check (Gap #5) ===
         if (salesTicket && ticketCode === 'GENERAL_ENQUIRY') {
             await pool.query(`UPDATE crm_tickets SET fallback_count = fallback_count + 1, updated = NOW() WHERE id = ?`, [salesTicket.id]);
             const [fbRow] = await pool.query(`SELECT fallback_count FROM crm_tickets WHERE id = ?`, [salesTicket.id]);
-            if (fbRow[0].fallback_count >= 3) { transferToHuman = true; } // Case 3: fallback loop
+            if (fbRow[0].fallback_count >= 3) { transferToHuman = true; }
         }
 
-        // 5. Ticket routing cases logic
-        const isSaleCode = ticketCode.startsWith('DEEP_INFO') || ticketCode.startsWith('PERSONAL') || ticketCode.startsWith('CORPORATION');
-
-        if ((salesTicket && ticketCode !== 'COMPLAINT' && ticketCode !== 'TECHNICAL_SUPPORT') || isSaleCode) {
+        if ((salesTicket && ticketCode !== 'COMPLAINT' && ticketCode !== 'TECHNICAL_SUPPORT') || ticketCode.startsWith('PERSONAL') || ticketCode.startsWith('CORPORATION')) {
             if (salesTicket) {
                 ticketId = salesTicket.id;
-                // Accumulate score on existing ticket (history already baked in from creation)
-                let updatedScore = Math.max(0, (salesTicket.score || 0) + messageScoreDelta);
-                if (ticketScoreZero) updatedScore = 0;
-
-                currentTicketScore = updatedScore;
-
-                let closeQuery = forceClose ? ', closed = 1' : '';
-                await pool.query(`UPDATE crm_tickets SET score = ?, transfer_to_human = GREATEST(transfer_to_human, ?) ${closeQuery}, updated = NOW() WHERE id = ?`,
-                    [updatedScore, transferToHuman ? 1 : 0, ticketId]);
-
-                if (ai_program_id && salesTicket.running_program_id !== ai_program_id)
-                    await pool.query(`UPDATE crm_tickets SET running_program_id = ?, updated = NOW() WHERE id = ?`, [ai_program_id, ticketId]);
-
-                actionTaken = forceClose ? 'CLOSED_SALES_TICKET_REJECTION' : 'UPDATED_SALES_TICKET';
-
-                const status = getLeadStatus(updatedScore);
-                if (status === 'HOT' || status === 'CONFIRMED') console.log(`🔥 ${status} LEAD! Ticket:${ticketId} Score:${updatedScore}`);
-
+                currentTicketScore = Math.max(0, (salesTicket.score || 0) + messageScoreDelta);
+                if (ticketScoreZero) currentTicketScore = 0;
+                await pool.query(`UPDATE crm_tickets SET score = ?, transfer_to_human = GREATEST(transfer_to_human, ?), closed = ?, updated = NOW() WHERE id = ?`,
+                    [currentTicketScore, transferToHuman ? 1 : 0, forceClose ? 1 : 0, ticketId]);
+                actionTaken = forceClose ? 'CLOSED_SALES_TICKET' : 'UPDATED_SALES_TICKET';
             } else {
-                // New sales ticket — apply history baseline to initial score
                 const [typeRes] = await pool.query(`SELECT id FROM crm_ticket_types WHERE code = ? LIMIT 1`, [ticketCode]);
                 const typeId = typeRes.length > 0 ? typeRes[0].id : 1;
-                let [preSaleLevel] = await pool.query(`SELECT id FROM crm_sales_ticket_levels WHERE code = 'PRE_SALE' LIMIT 1`);
-                const preSaleLevelId = preSaleLevel.length > 0 ? preSaleLevel[0].id : 1;
-
-                let initialScore = Math.max(0, messageScoreDelta + historyPts);
-                currentTicketScore = initialScore;
-
+                currentTicketScore = Math.max(0, messageScoreDelta + historyPts);
                 const [newTicket] = await pool.query(
-                    `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, sales_level_id, title, running_program_id, running_program_type, score, transfer_to_human, closed, created, updated)
-                     VALUES (?, ?, ?, ?, ?, 'Course', ?, ?, ?, NOW(), NOW())`,
-                    [leadId, typeId, preSaleLevelId, `مبيعات — ${ticketCode}`, ai_program_id, initialScore, transferToHuman ? 1 : 0, forceClose ? 1 : 0]
+                    `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, score, transfer_to_human, created, updated) VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+                    [leadId, typeId, `مبيعات — ${ticketCode}`, currentTicketScore, transferToHuman ? 1 : 0]
                 );
                 ticketId = newTicket.insertId;
                 actionTaken = 'CREATED_SALES_TICKET';
             }
-            timerType = forceClose ? null : 'PRE_SALE_FOLLOWUP';
+            timerType = 'PRE_SALE_FOLLOWUP';
             timerMinutes = preSaleMinutes;
 
         } else if (ticketCode === 'COMPLAINT') {
-            if (complaintTicket) {
-                ticketId = complaintTicket.id;
-                currentTicketScore = 0; // No scoring for Complaints
-                actionTaken = 'UPDATED_COMPLAINT_TICKET';
-            } else {
-                const initScore = 0; // No scoring for Complaints
-                const [newTicket] = await pool.query(
-                    `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, score, created, updated) VALUES (?, 26, ?, ?, NOW(), NOW())`,
-                    [leadId, `شكوى — ${new Date().toISOString().slice(0,10)}`, initScore]
-                );
-                ticketId = newTicket.insertId;
-                currentTicketScore = initScore;
-                actionTaken = 'CREATED_COMPLAINT_TICKET';
+            if (complaintTicket) { ticketId = complaintTicket.id; actionTaken = 'UPDATED_COMPLAINT_TICKET'; }
+            else {
+                const [newTicket] = await pool.query(`INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, created, updated) VALUES (?, 26, ?, NOW(), NOW())`, [leadId, `شكوى — ${new Date().toISOString().slice(0,10)}`]);
+                ticketId = newTicket.insertId; actionTaken = 'CREATED_COMPLAINT_TICKET';
             }
-            timerType = 'COMPLAINT_FOLLOWUP';
-            timerMinutes = complaintMinutes;
+            timerType = 'COMPLAINT_FOLLOWUP'; timerMinutes = complaintMinutes;
 
         } else if (ticketCode === 'TECHNICAL_SUPPORT') {
-            if (techTicket) {
-                ticketId = techTicket.id;
-                currentTicketScore = 0; // No scoring for Support
-                actionTaken = 'UPDATED_TECH_TICKET';
-            } else {
-                const initScore = 0; // No scoring for Support
-                const [newTicket] = await pool.query(
-                    `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, score, created, updated) VALUES (?, 25, ?, ?, NOW(), NOW())`,
-                    [leadId, `دعم فني — ${new Date().toISOString().slice(0,10)}`, initScore]
-                );
-                ticketId = newTicket.insertId;
-                currentTicketScore = initScore;
-                actionTaken = 'CREATED_TECH_TICKET';
+            if (techTicket) { ticketId = techTicket.id; actionTaken = 'UPDATED_TECH_TICKET'; }
+            else {
+                const [newTicket] = await pool.query(`INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, created, updated) VALUES (?, 25, ?, NOW(), NOW())`, [leadId, `دعم فني — ${new Date().toISOString().slice(0,10)}`]);
+                ticketId = newTicket.insertId; actionTaken = 'CREATED_TECH_TICKET';
             }
-            timerType = 'TECHNICAL_SUPPORT_FOLLOWUP';
-            timerMinutes = technicalMinutes;
+            timerType = 'TECHNICAL_SUPPORT_FOLLOWUP'; timerMinutes = technicalMinutes;
 
         } else if (ticketCode === 'TRAINER_APPLICATION') {
-            if (trainerTicket) {
-                ticketId = trainerTicket.id;
-                currentTicketScore = 0;
-                actionTaken = 'UPDATED_TRAINER_APPLICATION';
-            } else {
-                const [newTicket] = await pool.query(
-                    `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, score, created, updated) VALUES (?, 45, ?, 0, NOW(), NOW())`,
-                    [leadId, `طلب انضمام مدرب — ${new Date().toISOString().slice(0,10)}`]
-                );
-                ticketId = newTicket.insertId;
-                currentTicketScore = 0;
-                actionTaken = 'CREATED_TRAINER_APPLICATION';
+            if (trainerTicket) { ticketId = trainerTicket.id; actionTaken = 'UPDATED_TRAINER_APPLICATION'; }
+            else {
+                const [newTicket] = await pool.query(`INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, created, updated) VALUES (?, 45, ?, NOW(), NOW())`, [leadId, `انضمام مدرب — ${new Date().toISOString().slice(0,10)}`]);
+                ticketId = newTicket.insertId; actionTaken = 'CREATED_TRAINER_APPLICATION';
             }
-            timerType = 'TRAINER_FOLLOWUP';
-            timerMinutes = 1440; // 24h
-
-        } else if (ticketCode.startsWith('OUT_OF_PLAN') || ticketCode.startsWith('NEW_COURSE_REQUEST')) {
-            const [typeRes] = await pool.query(`SELECT id FROM crm_ticket_types WHERE code = ? LIMIT 1`, [ticketCode]);
-            const typeId = typeRes.length > 0 ? typeRes[0].id : 46;
-
-            const [newTicket] = await pool.query(
-                `INSERT INTO crm_tickets (crm_lead_id, crm_ticket_type_id, title, created, updated) VALUES (?, ?, ?, NOW(), NOW())`,
-                [leadId, typeId, `طلب — ${ticketCode}`]
-            );
-            ticketId = newTicket.insertId;
-            actionTaken = 'CREATED_OUT_OF_PLAN_TICKET_NO_TIMER';
+            timerType = 'TRAINER_FOLLOWUP'; timerMinutes = 1440;
 
         } else {
-            // For GENERAL_ENQUIRY: reflect existing ticket score so status is accurate
-            if (salesTicket) {
-                ticketId = salesTicket.id;
-                currentTicketScore = salesTicket.score || 0;
-            } else if (techTicket) {
-                ticketId = techTicket.id;
-                currentTicketScore = techTicket.score || 0;
-            } else if (complaintTicket) {
-                ticketId = complaintTicket.id;
-                currentTicketScore = complaintTicket.score || 0;
-            } else if (postSaleTicket) {
-                ticketId = postSaleTicket.id;
-            }
-
-            actionTaken = ticketId ? 'LOGGED_TO_EXISTING_TICKET' : 'GENERAL_ENQUIRY_NO_TICKET';
+            if (salesTicket) { ticketId = salesTicket.id; currentTicketScore = salesTicket.score || 0; }
+            actionTaken = ticketId ? 'LOGGED_TO_EXISTING_TICKET' : 'GENERAL_ENQUIRY';
         }
 
-        // 5. Cancel Old Pending Timers and Create New One if needed
         if (ticketId && timerType) {
             await pool.query(`UPDATE crm_ticket_timers SET status = 'cancelled' WHERE crm_ticket_id = ? AND status = 'pending'`, [ticketId]);
-            
-            const scheduledAt = new Date(Date.now() + timerMinutes * 60 * 1000);
-            await pool.query(
-                `INSERT INTO crm_ticket_timers (crm_ticket_id, timer_type, sequence_no, scheduled_at, status) VALUES (?, ?, 1, ?, 'pending')`,
-                [ticketId, timerType, scheduledAt]
-            );
+            await pool.query(`INSERT INTO crm_ticket_timers (crm_ticket_id, timer_type, scheduled_at, status) VALUES (?, ?, ?, 'pending')`, [ticketId, timerType, new Date(Date.now() + timerMinutes * 60 * 1000)]);
         }
 
         const aiReply = await generateAiReply(text, ticketCode, courseContext, requirementsContext, currentTicketScore);
-
-        // 7. Log the Customer Message
-        await pool.query(
-            `INSERT INTO crm_ticket_messages (crm_ticket_id, platform, interaction_type, message_text, attachment_url, router_value, sender_type, created) 
-             VALUES (?, ?, ?, ?, ?, ?, 'customer', NOW())`,
-            [ticketId || 0, platform, interaction_type, text, attachment_url, ticketCode]
-        );
-
-        const duration = ((Date.now() - startTime) / 1000).toFixed(3);
-        console.log(`⏱️ AI Processing took ${duration} seconds`);
-
+        await pool.query(`INSERT INTO crm_ticket_messages (crm_ticket_id, platform, message_text, router_value, created) VALUES (?, ?, ?, ?, NOW())`, [ticketId || 0, platform, text, ticketCode]);
 
         res.json({
-            status: "SUCCESS",
-            lead_id: leadId,
-            ticket_id: ticketId,
-            action: actionTaken,
-            resolved_ticket_type: ticketCode,
-            extracted_course_name: extractedCourseName || null,
-            ticket_score: currentTicketScore,
-            lead_status: getLeadStatus(currentTicketScore),
-            transfer_to_human: transferToHuman,
-            ai_reply: aiReply,
-            timer_created: timerType ? true : false,
-            message_logged: text
+            status: "SUCCESS", lead_id: leadId, ticket_id: ticketId, action: actionTaken,
+            resolved_ticket_type: ticketCode, ticket_score: currentTicketScore,
+            lead_status: getLeadStatus(currentTicketScore), ai_reply: aiReply
         });
 
     } catch (error) {
         console.error("Database Error: ", error);
-        res.status(500).json({ error: 'Database transaction failed', details: error.message });
+        res.status(500).json({ error: 'Database error', details: error.message });
     }
 });
 
 app.listen(port, async () => {
-    console.log(`✅ CRM Webhook Simulator with background jobs running on http://localhost:${port}`);
-
-    // Automatically trigger ngrok tunnel exposure
+    console.log(`✅ CRM Webhook Simulator running on http://localhost:${port}`);
     try {
         const ngrok = require('@ngrok/ngrok');
         const tunnel = await ngrok.forward({ addr: port, authtoken: process.env.NGROK_AUTHTOKEN });
         console.log(`🌍 ngrok tunnel opened at: ${tunnel.url()}`);
     } catch (err) {
-        console.error('⚠️ Could not establish ngrok tunnel:', err.message);
-    }
-});
-
-app.listen(port, async () => {
-    console.log(`✅ CRM Webhook Simulator with background jobs running on http://localhost:${port}`);
-
-    // Automatically trigger ngrok tunnel exposure
-    try {
-        const ngrok = require('@ngrok/ngrok');
-        const tunnel = await ngrok.forward({ addr: port, authtoken: process.env.NGROK_AUTHTOKEN });
-        console.log(`🌍 ngrok tunnel opened at: ${tunnel.url()}`);
-    } catch (err) {
-        console.error('⚠️ Could not establish ngrok tunnel:', err.message);
+        console.error('⚠️ ngrok failed:', err.message);
     }
 });
