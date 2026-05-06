@@ -5,5 +5,6 @@ const crmController = require('../controllers/crmController'); // استيراد
 // المسارات
 router.post('/create-ticket', crmController.createTicket);
 router.post('/complaint-handler', crmController.handleComplaint);
+router.post('/process-message', crmController.processMessage);
 
 module.exports = router;

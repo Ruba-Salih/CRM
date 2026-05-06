@@ -1,16 +1,15 @@
-var {con} = require("../db")
+const { pool } = require("../db");
 const { v4: uuid } = require("uuid");
 
-
-function query(q){
-    return new Promise(resolve => {
-        con.query(q,(err,result)=>{
-            console.log("query",q)
-            if(err)
-                console.error("Error",err)
-            resolve(result)
-        })
-    })
+async function query(q, params = []) {
+    try {
+        const [rows] = await pool.execute(q, params);
+        return rows;
+    } catch (err) {
+        console.error("Database Query Error:", err);
+        console.error("Query:", q);
+        return null;
+    }
 }
 
 async function sendToAi(data){
@@ -80,13 +79,19 @@ async function getResponse(messages,platform_source,platform_user_id){
     
     // adding previous messages in query for chat
     else if(platform_source == 'messenger'){
-        var last_messages = await query(`select * from facebook_messages 
-         where conversation_id in 
-               (select id from facebook_conversations where facebook_user_id='${platform_user_id}') 
-         order by id desc limit 4 offset 1`)
+        var last_messages = await query(
+            `select * from facebook_messages 
+             where conversation_id in 
+                   (select id from facebook_conversations where facebook_user_id=?) 
+             order by id desc limit 4 offset 1`,
+            [platform_user_id]
+        )
 
-        var social_profile = (await query(`select * from crm_lead_social_profiles 
-         where platform = 'facebook' and platform_user_id='${platform_user_id}' `))[0]
+        var social_profile = (await query(
+            `select * from crm_lead_social_profiles 
+             where platform = 'facebook' and platform_user_id=?`,
+            [platform_user_id]
+        ))[0]
 
         if(last_messages.length == 0)
             message.content = `${message.content}
@@ -108,13 +113,19 @@ async function getResponse(messages,platform_source,platform_user_id){
         
         `
     }else if(platform_source == 'instagram_messages'){
-        var last_messages = await query(`select * from instagram_messages 
-         where conversation_id in 
-               (select id from instagram_conversations where instagram_user_id='${platform_user_id}') 
-         order by id desc limit 4 offset 1`)
+        var last_messages = await query(
+            `select * from instagram_messages 
+             where conversation_id in 
+                   (select id from instagram_conversations where instagram_user_id=?) 
+             order by id desc limit 4 offset 1`,
+            [platform_user_id]
+        )
 
-        var social_profile = (await query(`select * from crm_lead_social_profiles 
-         where platform = 'instagram' and platform_user_id='${platform_user_id}' `))[0]
+        var social_profile = (await query(
+            `select * from crm_lead_social_profiles 
+             where platform = 'instagram' and platform_user_id=?`,
+            [platform_user_id]
+        ))[0]
 
         if(last_messages.length == 0)
             message.content = `${message.content}
