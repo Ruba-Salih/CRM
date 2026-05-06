@@ -34,27 +34,38 @@ socket.on("reconnect_failed", () => {
   console.log("❌ reconnect failed");
 });
 
-
 // Handle incoming AI requests from VPS
 socket.on("request_to_ai", async (data) => {
-  console.log("Received request:", data);
+  console.log("📩 Received request for AI:", data.requestId);
 
   try {
-    // Call your local Qwen server
-    const qwenRes = await axios.post("http://localhost:11434/v1/chat/completions", data);
+    // 1. استخراج الـ requestId وحذفه من البيانات المرسلة للأولاما
+    const { requestId, ...ollamaData } = data;
 
-    const answer = qwenRes.data.choices[0].message.content;
+    // 2. إضافة اسم الموديل (تأكد أن هذا الموديل محمل عندك في Ollama)
+    ollamaData.model = "qwen2.5:7b";
 
-    // Send back to VPS
+    // 3. إرسال الطلب
+    console.log("🤖 Calling Ollama...");
+    const qwenRes = await axios.post("http://localhost:11434/v1/chat/completions", ollamaData);
+
+    // الرد الكامل الذي يدعمه LangChain في n8n موجود داخل .data حصراً
+    const answer = qwenRes.data;
+    
+    // سنطبع الرد الكامل (بدون أخطاء دائرية)
+    console.log("✅ Full AI Response Data:", JSON.stringify(answer, null, 2));
+
+    // 4. إرسال الرد للجسر
     socket.emit("response_from_ai", {
-      requestId: data.requestId,
-      answer
+      requestId: requestId,
+      answer: answer
     });
 
   } catch (e) {
+    console.error("❌ Ollama Error:", e.response ? e.response.data : e.message);
     socket.emit("response_from_ai", {
       requestId: data.requestId,
-      answer: "Error: " + e.message
+      answer: "Error: " + (e.response ? JSON.stringify(e.response.data) : e.message)
     });
   }
 });

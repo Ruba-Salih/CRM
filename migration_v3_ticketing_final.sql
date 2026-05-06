@@ -112,13 +112,11 @@ INSERT IGNORE INTO `crm_ticket_types` (`id`, `code`, `name_en`, `name_ar`) VALUE
 (46, 'GENERAL_ENQUIRY', 'General / Unclassified', 'استفسار عام / غير مصنف');
 
 -- 7. Add Timer Settings to atc_config
-INSERT IGNORE INTO `atc_config` (`title`, `value`) VALUES
-('crm_pre_sale_timer_minutes', '1435'),
-('crm_complaint_timer_minutes', '240'),
-('crm_technical_timer_minutes', '240'),
-('crm_followup_timer_minutes', '1435');
-
--- [من ملف migration_v3_ticketing_final.sql]
+INSERT INTO `atc_config` (`id`, `title`, `name`, `value`, `comment`) VALUES
+(NULL, 'crm_pre_sale_timer_minutes', '1435', '23h55m للمبيعات'),
+(NULL, 'crm_complaint_timer_minutes', '240', '4h للشكاوى'),
+(NULL, 'crm_technical_timer_minutes', '240', '4h للدعم الفني'),
+(NULL, 'crm_followup_timer_minutes', '1435', '23h55m المتابعة التالية')
 
 -- 8. Create crm_support_kb Table for Technical Support FAQ
 CREATE TABLE IF NOT EXISTS `crm_support_kb` (
@@ -143,7 +141,6 @@ INSERT IGNORE INTO `crm_support_kb` (`problem_key`, `problem_title_ar`, `solutio
 ('screen_size', 'الشاشة صغيرة', 'اضغط زر المربع أسفل الفيديو وفعّل تدوير الشاشة التلقائي في جهازك.', 'video'),
 ('forgot_password', 'نسيت كلمة السر', 'استخدم رابط "نسيت كلمة السر" في صفحة الدخول أو تواصل معنا في الواتساب: 0925777109.', 'account'),
 ('access_steps', 'طريقة الوصول للفيديوهات', '1. افتح الداشبورد | 2. اضغط اسم الدورة | 3. اضغط أيقونة الفيديوهات (رقم 2) | 4. استخدم زر Next.', 'video');
-
 
 COMMIT;
 SET FOREIGN_KEY_CHECKS = 1;

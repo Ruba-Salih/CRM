@@ -1,0 +1,76 @@
+const path = require("path");
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const cors = require("cors");
+const { v4: uuid } = require("uuid");
+require('dotenv').config({ path: path.resolve(__dirname, './.env') });
+
+const app = express();
+app.use(express.json());
+app.use(cors());
+
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: { origin: "*" }
+});
+
+// Track connected clients
+let aiClient = null;
+
+io.on("connection", (socket) => {
+  console.log("Client connected:", socket.id);
+
+  socket.on("register_ai_client", (data) => {
+    if (data.token !== process.env.AI_TOKEN) return;
+    aiClient = socket;
+    console.log("AI client registered:", socket.id);
+  });
+
+  socket.on("disconnect", () => {
+    if (aiClient?.id === socket.id) {
+      aiClient = null;
+    }
+    console.log("Client disconnected:", socket.id);
+  });
+});
+
+
+// ----- EXPRESS ROUTE FOR N8N -----
+
+app.post("/responses", async (req, res) => {
+  if (!aiClient) {
+    return res.status(503).json({
+      error: "AI client is not connected"
+    });
+  }
+
+  const requestId = uuid();
+
+  // Send message to local AI client
+  aiClient.emit("request_to_ai", {
+    requestId,
+    body: req.body
+  });
+"/responses"
+  // Wait for response from AI client
+  const answer = await new Promise((resolve) => {
+    const handler = (data) => {
+      if (data.requestId === requestId) {
+        resolve(data.answer);
+        aiClient.off("response_from_ai", handler);
+      }
+    };
+    aiClient.on("response_from_ai", handler);
+  });
+
+  // Return the answer to n8n
+  res.json({ answer });
+});
+
+app.get("/test",(req,res)=>{
+    res.send("Be happy")
+})
+const PORT = process.env.PORT || 5577;
+server.listen(PORT, () => console.log(`VPS AI Bridge Running on port ${PORT}`));
