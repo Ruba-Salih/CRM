@@ -100,10 +100,18 @@ test case:
 لمن يصل hotly اقول ليهو هاك ادفع
 افصل الsuppotr ف جدول براهو
 support + coplint = have no scoring
-whatsapp api arthurer
+whatsapp api arthurer 
 
 تذكرة المدرب نقول ليهو رسل لينا مؤهلاتك و بعدي نقول ليهو ح نراجع طلبك و نتواصل معاك و نحولو لزول
 
-when to update ticit data and when to make new one
-what to do for attchment
+when to update tickit data and when to make new one:
+based on catogery and timer
+
+what to do for attchment:
+1- openAi whispier for voice notes
+2- pabbel OCR for img
+
 coustomer reivew in the end
+
+to rflects changs:
+

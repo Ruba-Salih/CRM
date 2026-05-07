@@ -9,7 +9,7 @@ module.exports = {
      * Triggered by n8n after a message is handled and an AI reply is generated.
      */
     processMessage: async (req, res) => {
-        const { platform_user_id, text, ai_reply, router_value, source } = req.body;
+        const { platform_user_id, text, ai_reply, router_value, source, course_info, attachment_url } = req.body;
         const platform = source === 'messenger' || source === 'facebook_comments' ? 'facebook' 
                        : source === 'whatsapp_messages' ? 'whatsapp' 
                        : source === 'instagram_messages' ? 'instagram' : 'facebook';
@@ -49,8 +49,17 @@ module.exports = {
 
             // 3. Ticket Type Resolution
             let ticketCode = router_value || 'GENERAL_ENQUIRY';
-            if (ticketCode === 'DEEP_INFO_PERSONAL') ticketCode = await crmService.resolveTicketCode('PERSONAL_ONLINE_COURSES', text);
-            if (ticketCode === 'DEEP_INFO_CORPORATION') ticketCode = await crmService.resolveTicketCode('CORPORATION_ONLINE_COURSES', text);
+            
+            // Priority 1: Use structured course_info if provided by n8n
+            if (course_info && course_info.name) {
+                const base = `${course_info.program_type === 'Workshop' ? 'PERSONAL_ONLINE_WORKSHOPS' : 'PERSONAL_ONLINE_COURSES'}`;
+                ticketCode = await crmService.resolveTicketCode(base, course_info.name);
+            } 
+            // Priority 2: Fallback to text searching if n8n didn't extract course_info
+            else {
+                if (ticketCode === 'DEEP_INFO_PERSONAL') ticketCode = await crmService.resolveTicketCode('PERSONAL_ONLINE_COURSES', text);
+                if (ticketCode === 'DEEP_INFO_CORPORATION') ticketCode = await crmService.resolveTicketCode('CORPORATION_ONLINE_COURSES', text);
+            }
 
             // 4. Scoring
             let intentPts = (['رقم الحساب', 'ادفع كيف', 'بنكك', 'سجلني'].some(s => text && text.includes(s))) ? 50 : 20;
@@ -61,7 +70,7 @@ module.exports = {
 
             // 5. Manage Tickets
             let [openTickets] = await pool.query(`
-                SELECT t.id, t.score, tt.code as ticket_type_code 
+                SELECT t.id, t.score, t.updated, tt.code as ticket_type_code 
                 FROM crm_tickets t 
                 JOIN crm_ticket_types tt ON t.crm_ticket_type_id = tt.id 
                 WHERE t.crm_lead_id = ? AND t.closed = 0
@@ -74,10 +83,27 @@ module.exports = {
                 || ticketCode === 'TECHNICAL_SUPPORT'
                 || ticketCode === 'TRAINER_APPLICATION';
 
-            const activeTicket = openTickets.find(t => t.ticket_type_code === ticketCode 
-                || (ticketCode.startsWith('PERSONAL') && t.ticket_type_code.startsWith('PERSONAL'))
-                || (ticketCode.startsWith('CORPORATION') && t.ticket_type_code.startsWith('CORPORATION'))
-            );
+            const isTicketExpired = (ticket) => {
+                const now = new Date();
+                const updated = new Date(ticket.updated);
+                const diffDays = (now - updated) / (1000 * 60 * 60 * 24);
+                
+                if (ticket.ticket_type_code.startsWith('PERSONAL') || ticket.ticket_type_code.startsWith('CORPORATION')) {
+                    return diffDays > 14;
+                }
+                if (ticket.ticket_type_code === 'TECHNICAL_SUPPORT') return diffDays > 3;
+                if (ticket.ticket_type_code === 'COMPLAINT') return diffDays > 2;
+                if (ticket.ticket_type_code === 'TRAINER_APPLICATION') return diffDays > 21;
+                
+                return diffDays > 14; // Default limit
+            };
+
+            const activeTicket = openTickets.find(t => {
+                if (isTicketExpired(t)) return false; // Ignore stale tickets
+                return t.ticket_type_code === ticketCode 
+                    || (ticketCode.startsWith('PERSONAL') && t.ticket_type_code.startsWith('PERSONAL'))
+                    || (ticketCode.startsWith('CORPORATION') && t.ticket_type_code.startsWith('CORPORATION'));
+            });
             let ticketId;
             let currentScore = 0;
 
@@ -107,10 +133,16 @@ module.exports = {
                 await pool.query(`INSERT INTO crm_ticket_timers (crm_ticket_id, timer_type, scheduled_at, status) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'pending')`, [ticketId, timerType, timerMinutes]);
             }
 
-            // 7. Log Messages (Option A: Duplication for Dashboard)
+            // 7. Log Messages (Duplicated for Dashboard)
             if (ticketId) {
-                await pool.query(`INSERT INTO crm_ticket_messages (crm_ticket_id, platform, interaction_type, message_text, sender_type, created) VALUES (?, ?, 'message', ?, 'customer', NOW())`, [ticketId, platform, text]);
-                await pool.query(`INSERT INTO crm_ticket_messages (crm_ticket_id, platform, interaction_type, message_text, sender_type, created) VALUES (?, ?, 'message', ?, 'bot', NOW())`, [ticketId, platform, ai_reply]);
+                await pool.query(
+                    `INSERT INTO crm_ticket_messages (crm_ticket_id, platform, interaction_type, message_text, attachment_url, sender_type, created) VALUES (?, ?, 'message', ?, ?, 'customer', NOW())`, 
+                    [ticketId, platform, text, attachment_url || null]
+                );
+                await pool.query(
+                    `INSERT INTO crm_ticket_messages (crm_ticket_id, platform, interaction_type, message_text, sender_type, created) VALUES (?, ?, 'message', ?, 'bot', NOW())`, 
+                    [ticketId, platform, ai_reply]
+                );
             }
 
             res.json({ status: "SUCCESS", lead_id: leadId, ticket_id: ticketId, ticket_score: currentScore, lead_status: crmService.getLeadStatus(currentScore) });

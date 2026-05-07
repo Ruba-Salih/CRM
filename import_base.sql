@@ -1,0 +1,4 @@
+
+SET FOREIGN_KEY_CHECKS = 0;
+source e:/CRM/test4_atc (1).sql
+SET FOREIGN_KEY_CHECKS = 1;

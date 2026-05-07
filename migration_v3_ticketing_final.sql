@@ -8,7 +8,6 @@ SET FOREIGN_KEY_CHECKS = 0;
 START TRANSACTION;
 
 -- 1. Modify crm_ticket_messages (Normalized & Direct Platform String)
--- Dropping old platform-specific message IDs (handled manually if errors occur)
 ALTER TABLE `crm_ticket_messages`
   DROP COLUMN `facebook_comment_id`,
   DROP COLUMN `facebook_message_id`,
@@ -22,29 +21,26 @@ ALTER TABLE `crm_ticket_messages`
   DROP COLUMN `linkedin_message_id`,
   DROP COLUMN `pstn_call_id`,
   DROP COLUMN `pstn_sms_id`,
-  DROP COLUMN `topic_chat_id`;
-
--- Adding new normalized columns
-ALTER TABLE `crm_ticket_messages`
-  ADD COLUMN `platform` varchar(50) DEFAULT NULL AFTER `crm_ticket_id` COMMENT 'Source platform name: whatsapp, facebook, tiktok, telegram, instagram, pstn, sms',
+  DROP COLUMN `topic_chat_id`,
+  ADD COLUMN `platform` varchar(50) DEFAULT NULL AFTER `crm_ticket_id`,
   ADD COLUMN `interaction_type` enum('message', 'comment', 'reaction', 'call') DEFAULT 'message' AFTER `platform`,
-  ADD COLUMN `external_id` varchar(255) DEFAULT NULL AFTER `interaction_type` COMMENT 'The primary key ID from the source table',
+  ADD COLUMN `external_id` varchar(255) DEFAULT NULL AFTER `interaction_type`,
   ADD COLUMN `message_text` text DEFAULT NULL AFTER `external_id`,
-  ADD COLUMN `attachment_url` text DEFAULT NULL AFTER `message_text` COMMENT 'URL for image, audio, or document sent by user',
+  ADD COLUMN `attachment_url` text DEFAULT NULL AFTER `message_text`,
   ADD COLUMN `router_value` varchar(50) DEFAULT NULL AFTER `attachment_url`,
   ADD COLUMN `sender_type` enum('customer','bot','human') DEFAULT 'customer' AFTER `router_value`;
 
 -- 2. Update crm_tickets with Sales Context and Timing
 ALTER TABLE `crm_tickets`
   ADD COLUMN `sales_level_id` int(11) DEFAULT NULL AFTER `crm_ticket_type_id`,
-  ADD COLUMN `running_program_id` int(11) DEFAULT NULL AFTER `sales_level_id` COMMENT 'ID of running_course or workshop',
+  ADD COLUMN `running_program_id` int(11) DEFAULT NULL AFTER `sales_level_id`,
   ADD COLUMN `running_program_type` enum('Course','Workshop') DEFAULT NULL AFTER `running_program_id`,
   ADD COLUMN `last_timer_time` timestamp NULL DEFAULT NULL AFTER `updated`,
   ADD CONSTRAINT `fk_ticket_sales_level` FOREIGN KEY (`sales_level_id`) REFERENCES `crm_sales_ticket_levels` (`id`) ON DELETE SET NULL;
 
 -- 3. Update crm_leads and crm_lead_social_profiles to align with enum logic
 ALTER TABLE `crm_leads`
-  ADD COLUMN `user_id_fk` int(11) DEFAULT NULL AFTER `user_id` COMMENT 'Link to users.id after registration',
+  ADD COLUMN `user_id_fk` int(11) DEFAULT NULL AFTER `user_id`,
   MODIFY COLUMN `source_platform` varchar(50) NOT NULL,
   MODIFY COLUMN `first_interaction_type` enum('comment','reaction','message','call') NOT NULL;
 
@@ -116,7 +112,7 @@ INSERT INTO `atc_config` (`id`, `title`, `name`, `value`, `comment`) VALUES
 (NULL, 'crm_pre_sale_timer_minutes', '1435', '23h55m للمبيعات'),
 (NULL, 'crm_complaint_timer_minutes', '240', '4h للشكاوى'),
 (NULL, 'crm_technical_timer_minutes', '240', '4h للدعم الفني'),
-(NULL, 'crm_followup_timer_minutes', '1435', '23h55m المتابعة التالية')
+(NULL, 'crm_followup_timer_minutes', '1435', '23h55m المتابعة التالية');
 
 -- 8. Create crm_support_kb Table for Technical Support FAQ
 CREATE TABLE IF NOT EXISTS `crm_support_kb` (
