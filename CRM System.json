@@ -423,7 +423,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) VALUES (\"facebook\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\nset @lead_id = LAST_INSERT_ID();\n\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, gender, display_name, profile_pic, locale) VALUES (@lead_id, \"facebook\", '{{ $('Message Preparer6').item.json.sessionId }}','{{ $json.profile.gender }}','{{ $json.profile.display_name }}','{{ $json.profile.profile_pic }}','{{ $json.profile.locale }}');\n\nINSERT INTO facebook_conversations(facebook_conversation_id, lead_id, message_count, last_message_time) VALUES ('{{ $json.conversation_id }}',@lead_id,1,'{{ new Date($('Message Preparer6').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');\n\nset @conversation_id = LAST_INSERT_ID();\n\nINSERT INTO facebook_messages(facebook_message_id, facebook_conversation_id, conversation_id, lead_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer6').item.json.message_id }}', '{{ $json.conversation_id }}', @conversation_id, @lead_id, 'user', '{{ $('Message Preparer6').item.json.chatInput }}', {{ $('Message Preparer6').item.json.replying_to_id ? \"'\" + $('Message Preparer6').item.json.replying_to_id + \"'\" : 'NULL'  }}, '{{ new Date($('Message Preparer6').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');",
+        "query": "INSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) VALUES (\"facebook\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\nset @lead_id = LAST_INSERT_ID();\n\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, gender, display_name, profile_pic, locale) VALUES (@lead_id, \"facebook\", '{{ $('Message Preparer6').item.json.sessionId }}','{{ $json.profile.gender }}','{{ $json.profile.display_name }}','{{ $json.profile.profile_pic }}','{{ $json.profile.locale }}');\n\nINSERT INTO facebook_conversations(facebook_conversation_id, lead_id, message_count, last_message_time) VALUES (COALESCE(NULLIF(NULLIF('{{ $json.conversation_id }}', 'undefined'), ''), CONCAT('fb_', REPLACE(UUID(),'-',''))),@lead_id,1,'{{ new Date($('Message Preparer6').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');\n\nset @conversation_id = LAST_INSERT_ID();\n\nINSERT INTO facebook_messages(facebook_message_id, facebook_conversation_id, conversation_id, lead_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer6').item.json.message_id }}', COALESCE(NULLIF(NULLIF('{{ $json.conversation_id }}', 'undefined'), ''), CONCAT('fb_', REPLACE(UUID(),'-',''))), @conversation_id, @lead_id, 'user', '{{ $('Message Preparer6').item.json.chatInput }}', {{ $('Message Preparer6').item.json.replying_to_id ? \"'\" + $('Message Preparer6').item.json.replying_to_id + \"'\" : 'NULL'  }}, '{{ new Date($('Message Preparer6').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');",
         "options": {}
       },
       "type": "n8n-nodes-base.mySql",
@@ -502,7 +502,7 @@
               "rightValue": "",
               "operator": {
                 "type": "object",
-                "operation": "exists",
+                "operation": "notEmpty",
                 "singleValue": true
               }
             }
@@ -1199,7 +1199,7 @@
               "rightValue": "",
               "operator": {
                 "type": "object",
-                "operation": "exists",
+                "operation": "notEmpty",
                 "singleValue": true
               }
             }
@@ -1409,7 +1409,7 @@
               "rightValue": "",
               "operator": {
                 "type": "object",
-                "operation": "exists",
+                "operation": "notEmpty",
                 "singleValue": true
               }
             }
@@ -1849,7 +1849,7 @@
               "rightValue": "",
               "operator": {
                 "type": "object",
-                "operation": "exists",
+                "operation": "notEmpty",
                 "singleValue": true
               }
             }
@@ -2328,7 +2328,7 @@
               "rightValue": "",
               "operator": {
                 "type": "object",
-                "operation": "exists",
+                "operation": "notEmpty",
                 "singleValue": true
               }
             }
@@ -2515,7 +2515,7 @@
               "rightValue": "",
               "operator": {
                 "type": "object",
-                "operation": "exists",
+                "operation": "notEmpty",
                 "singleValue": true
               }
             }
@@ -2898,7 +2898,7 @@
               "rightValue": "",
               "operator": {
                 "type": "object",
-                "operation": "exists",
+                "operation": "notEmpty",
                 "singleValue": true
               }
             }
@@ -3429,7 +3429,7 @@
               "rightValue": "",
               "operator": {
                 "type": "object",
-                "operation": "exists",
+                "operation": "notEmpty",
                 "singleValue": true
               }
             }
