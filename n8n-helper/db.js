@@ -16,4 +16,3 @@ const pool = mysql.createPool({
 console.log("ATC Database Pool Created!");
 
 module.exports = { pool };
-

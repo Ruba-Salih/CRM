@@ -1,0 +1,5084 @@
+{
+  "name": "CRM System",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n\n  return {text:$items(\"Smart Router Input1\")[0].json.output}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        17424,
+        5680
+      ],
+      "id": "3379d5ac-9c05-4961-a9a9-ef4ef80a2647",
+      "name": "Code in JavaScript25",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "path": "65ed68f2-ee4f-4624-9785-767253b8976f",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        12528,
+        6720
+      ],
+      "id": "b9132dcf-dbc4-4cef-b31a-398280710989",
+      "name": "Webhook1",
+      "webhookId": "65ed68f2-ee4f-4624-9785-767253b8976f"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v24.0/me/messages",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "EAAUN12ysZBckBQBMf2OZAWUVi3NYDddsH4uS4l8juVvVfoI0f9X819TkW3LkencwduPZCYb4efFwjZCVlaIWoB08FZBYRaEl8XU0tlKIW0bNZAy8LnmZC0ZCTla8cDYuQscgpHKmFoAGqhZAeJzSfFKWmMlMq8ZBOdiSL7GgBWWrzEeLzf7bZC0cVxuC8YDKkGpKAkSVErNI5aVjBNH6z7YhEIDyGwS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"recipient\": {\n    \"id\": \"{{ $('Message Preparer6').first().json.sessionId  }}\"\n  },\n  \"messaging_type\": \"RESPONSE\",\n  \"message\": {\n    \"text\": {{ JSON.stringify($('HTTP Request1').first().json.toString().trim()) }}\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        17808,
+        5680
+      ],
+      "id": "0a825dc0-35b6-4522-a869-2253c4ac28a9",
+      "name": "HTTP Request16"
+    },
+    {
+      "parameters": {
+        "content": "## Facebook WebHooks\n**Listent For Messages and Comments** ",
+        "height": 464,
+        "width": 1184,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        12320,
+        6624
+      ],
+      "typeVersion": 1,
+      "id": "4130ab18-c4ea-43ff-b362-7dbb9d35bdce",
+      "name": "Sticky Note26"
+    },
+    {
+      "parameters": {
+        "content": "## Message Smart Router\n**Route the incoming messages to the suitable place** ",
+        "height": 336,
+        "width": 672
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        13552,
+        5536
+      ],
+      "typeVersion": 1,
+      "id": "64e4715e-f2e5-40b1-822e-bcfa8ca4942e",
+      "name": "Sticky Note27"
+    },
+    {
+      "parameters": {
+        "content": "## Message Response\n**Sending replies to Messenger, TikTok, Instagram** ",
+        "height": 448,
+        "width": 704
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        16528,
+        5456
+      ],
+      "typeVersion": 1,
+      "id": "8ce3eaf8-ecae-4dca-a297-a7b9c57f288f",
+      "name": "Sticky Note31"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nlet msg = $items(\"Prepare Data to Switch4\")[0].json.data\n\nlet message_id = msg.message.mid\nlet chatInput = msg.message.text\nlet created_time = msg.timestamp\n\nlet sessionId = msg.sender.id\nlet page_id = msg.recipient.id\n\nlet replying_to_id = null\nif(msg.message.reply_to)\n  replying_to_id = msg.message.reply_to.mid\n\n\nreturn [{json:{\n  message_id,\n  replying_to_id,\n  chatInput,\n  created_time,\n  sessionId,\n  page_id\n} }]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        11616,
+        6352
+      ],
+      "id": "5da4dd98-0b66-4087-b07a-0bc1baba8e8e",
+      "name": "Message Preparer6"
+    },
+    {
+      "parameters": {
+        "jsCode": "const entry = items[0].json.body.entry[0];\n\n// 1. التعامل مع رسائل Messenger (Messages)\nif (entry.messaging) {\n  const msg = entry.messaging[0];\n  const messageData = msg.message;\n\n  // التحقق مما إذا كانت الرسالة تحتوي على ملحقات (Attachments)\n  if (messageData && messageData.attachments) {\n    const audioAttachment = messageData.attachments.find(att => att.type === 'audio');\n    \n    if (audioAttachment) {\n      // إرجاع بيانات الرسالة الصوتية مع رابط الملف\n      return [{ \n        json: { \n          event_type: \"messenger_audio\", \n          audio_url: audioAttachment.payload.url,\n          sender_id: msg.sender.id,\n          data: msg \n        } \n      }];\n    }\n  }\n\n  // إذا كانت رسالة نصية عادية\n  return [{ json: { event_type: \"message\", data: msg } }];\n}\n\n// 2. التعامل مع التفاعلات على المنشورات (Webhooks for Posts/Comments)\nconst change = entry.changes[0];\nconst value = change.value;\n\nif (value.comment_id && value.item === \"comment\") {\n  return [{ json: { event_type: \"post_comment\", data: value } }];\n}\n\nif (value.item === \"reaction\") {\n  return [{ json: { event_type: \"post_reaction\", data: value } }];\n}\n\nif (value.verb === \"add\" && value.item === \"post\") {\n  return [{ json: { event_type: \"post_created\", data: value } }];\n}\n\nif (value.verb === \"edited\") {\n  return [{ json: { event_type: \"post_edited\", data: value } }];\n}\n\nif (value.verb === \"remove\") {\n  return [{ json: { event_type: \"post_deleted\", data: value } }];\n}\n\nreturn [{ json: { event_type: \"unknown\", data: value } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12736,
+        6736
+      ],
+      "id": "0005d274-6e46-4ade-b0db-26c23b563b5b",
+      "name": "Prepare Data to Switch4"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "message",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "dcf93495-180b-4a5d-a01c-77891beadfc2"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "26347a6b-17ba-4ccb-a5f5-f39b6c6313e7",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_comment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4d82da8c-8a62-4677-9e02-789c7ef8543f",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_reaction",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "b7b3d80a-4d40-43dc-a393-2a7edb0c5b4b",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "53ddb804-7404-4eb8-ba6f-b225f442444c",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_edited",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "30f925db-53ee-4419-91b5-b7421f5dcae8",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_deleted",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "9d55afb3-cc88-44a9-968a-677b9f5fb7ac",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "messenger_audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        12912,
+        6672
+      ],
+      "id": "ed43e1c1-594b-405d-a9e8-4f65366ec2f4",
+      "name": "Switch7"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nconst workflowStaticData = $getWorkflowStaticData('global');\nworkflowStaticData.source = 'n8n_chat'\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13056,
+        5632
+      ],
+      "id": "351dd41e-2607-41f8-8779-752e8898f1ef",
+      "name": "Code in JavaScript32"
+    },
+    {
+      "parameters": {
+        "content": "## n8n chat",
+        "height": 256,
+        "width": 400
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        12896,
+        5552
+      ],
+      "typeVersion": 1,
+      "id": "51f98778-8761-416b-937d-b2cb191c1163",
+      "name": "Sticky Note37"
+    },
+    {
+      "parameters": {
+        "content": "## Messages",
+        "height": 368,
+        "width": 1072
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        11552,
+        6128
+      ],
+      "typeVersion": 1,
+      "id": "7ed2cfd1-7fc2-48d1-b7a1-9a1675e46413",
+      "name": "Sticky Note38"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  (SELECT JSON_OBJECT('sender',sender,\"message_text\",message_text) from facebook_messages where reply_to_message_id = '{{ $json.replying_to_id }}') as replying_message,\n(SELECT JSON_OBJECT(\"display_name\",display_name,\"profile_pic\",profile_pic,\"gender\",gender) from crm_lead_social_profiles where platform = 'facebook' and platform_user_id='{{ $json.sessionId }}') as profile",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        11824,
+        6352
+      ],
+      "id": "db66c15e-fd60-4e87-873c-6bbf2523f0e8",
+      "name": "Execute a SQL query22",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $input.first().json\n\nreturn [{json:{\n  profile:result.profile,\n  replying_message:result.replying_message,\n  sessionId:$items(\"Message Preparer6\")[0].json.sessionId\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12000,
+        6352
+      ],
+      "id": "56725d4d-cdfc-453b-b3d3-e22e078d6680",
+      "name": "Code in JavaScript33"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v24.0/{{ $input.first().json.sessionId }}?fields=name,profile_pic,gender,locale,timezone",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "EAAUN12ysZBckBQBMf2OZAWUVi3NYDddsH4uS4l8juVvVfoI0f9X819TkW3LkencwduPZCYb4efFwjZCVlaIWoB08FZBYRaEl8XU0tlKIW0bNZAy8LnmZC0ZCTla8cDYuQscgpHKmFoAGqhZAeJzSfFKWmMlMq8ZBOdiSL7GgBWWrzEeLzf7bZC0cVxuC8YDKkGpKAkSVErNI5aVjBNH6z7YhEIDyGwS"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        11696,
+        6176
+      ],
+      "id": "0e8a7a09-2971-4e1c-acce-6aaf7af5dd22",
+      "name": "HTTP Request17"
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $items(\"HTTP Request17\")[0].json\nlet conversation_id = $input.first().json.data[0].id\n\nlet profile = {\n  \"display_name\":result.name,\n  \"profile_pic\":result.profile_pic,\n  \"gender\":result.gender,\n  \"locale\":result.locale,\n  \"timezone\":result.timezone,\n}\n\n\nreturn [{json:{\n  conversation_id,\n  profile\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12016,
+        6176
+      ],
+      "id": "57cbbecb-a37a-46a7-a6ac-9b47ab1ae432",
+      "name": "Code in JavaScript34"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) VALUES (\"facebook\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\nset @lead_id = LAST_INSERT_ID();\n\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, gender, display_name, profile_pic, locale) VALUES (@lead_id, \"facebook\", '{{ $('Message Preparer6').item.json.sessionId }}','{{ $json.profile.gender }}','{{ $json.profile.display_name }}','{{ $json.profile.profile_pic }}','{{ $json.profile.locale }}');\n\nINSERT INTO facebook_conversations(facebook_conversation_id, lead_id, message_count, last_message_time) VALUES ('{{ $json.conversation_id }}',@lead_id,1,'{{ new Date($('Message Preparer6').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');\n\nset @conversation_id = LAST_INSERT_ID();\n\nINSERT INTO facebook_messages(facebook_message_id, facebook_conversation_id, conversation_id, lead_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer6').item.json.message_id }}', '{{ $json.conversation_id }}', @conversation_id, @lead_id, 'user', '{{ $('Message Preparer6').item.json.chatInput }}', {{ $('Message Preparer6').item.json.replying_to_id ? \"'\" + $('Message Preparer6').item.json.replying_to_id + \"'\" : 'NULL'  }}, '{{ new Date($('Message Preparer6').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        12192,
+        6176
+      ],
+      "id": "fc24e6fa-5495-484f-a4cd-c4d35949da5f",
+      "name": "Execute a SQL query23",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-helper.afro-tech.net/api/marketing/facebook/webhook",
+        "sendBody": true,
+        "specifyBody": "={{ $json.data }}",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        12432,
+        7104
+      ],
+      "id": "e458d895-4888-40b1-a347-3ae31e724306",
+      "name": "HTTP Request18"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v24.0/me/conversations?user_id={{ $('Code in JavaScript33').item.json.sessionId }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "EAAUN12ysZBckBQBMf2OZAWUVi3NYDddsH4uS4l8juVvVfoI0f9X819TkW3LkencwduPZCYb4efFwjZCVlaIWoB08FZBYRaEl8XU0tlKIW0bNZAy8LnmZC0ZCTla8cDYuQscgpHKmFoAGqhZAeJzSfFKWmMlMq8ZBOdiSL7GgBWWrzEeLzf7bZC0cVxuC8YDKkGpKAkSVErNI5aVjBNH6z7YhEIDyGwS"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        11856,
+        6176
+      ],
+      "id": "aa512ac9-95b4-4c5d-a88b-2d9d7ffc8806",
+      "name": "HTTP Request19"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1a78ee83-2df9-4b20-85e2-46e1b0c07d81",
+              "leftValue": "={{ $json.profile }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        12176,
+        6352
+      ],
+      "id": "9241d7a1-38b6-4d13-b5bc-91a81240c1d0",
+      "name": "Has Old Messages6"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.id, c.facebook_conversation_id, c.lead_id INTO @conversation_id, @fb_conv_id, @lead_id\nFROM facebook_conversations c\nJOIN crm_lead_social_profiles p ON p.crm_lead_id = c.lead_id\nWHERE p.platform = 'facebook' AND p.platform_user_id = '{{ $('Message Preparer6').item.json.sessionId }}'\nORDER BY c.id DESC LIMIT 1;\n\nINSERT INTO facebook_messages(facebook_message_id, facebook_conversation_id, conversation_id, lead_id, sender, message_text, reply_to_message_id, created_time)\nVALUES ('{{ $('Message Preparer6').item.json.message_id }}', @fb_conv_id, @conversation_id, @lead_id, 'user', '{{ $('Message Preparer6').item.json.chatInput }}', {{ $('Message Preparer6').item.json.replying_to_id ? \"'\" + $('Message Preparer6').item.json.replying_to_id + \"'\" : 'NULL'  }}, '{{ new Date($('Message Preparer6').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        12368,
+        6336
+      ],
+      "id": "e09c1c29-7efc-46a6-879c-290b91c21467",
+      "name": "Execute a SQL query24",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "var row = $input.first().json;\nreturn [{json:{\n  chatInput: row.text || row.data?.message?.text || \"\", \n  sessionId: row.sender_id || row.data?.sender?.id || \"default_session\",\n  page_id: row.page_id || row.data?.recipient?.id || \"\",\n  source: \"messenger\"\n}}]\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13376,
+        6144
+      ],
+      "id": "dbbdc076-5f15-4682-8ac3-9eb324f62d50",
+      "name": "To Router Preparer6"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = {}\n\nconst row = $input.first().json\ndata.chatInput = row.chatInput;\ndata.sessionId = row.sessionId;\ndata.source = row.source;\ndata.page_id = row.page_id;\n\nif (!row.source) \n  data.source = 'n8n-chat'\n\nlet query = `\nUser question:\n${ JSON.stringify(data.chatInput.trim()) }\n\n`\n\nreturn [{ json: {\n  query,\n  ...data\n} }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13664,
+        5632
+      ],
+      "id": "eafe03dd-ae8e-4bc2-89f5-237909d8fdac",
+      "name": "Smart Router Input1"
+    },
+    {
+      "parameters": {
+        "jsCode": "let source = $items(\"Smart Router Input1\")[0].json.source\nlet sessionId = $items(\"Smart Router Input1\")[0].json.sessionId\nlet chatInput = $items(\"Smart Router Input1\")[0].json.chatInput\nlet router_value = $items(\"Smart Router Input1\")[0].json.router_value || 'GENERAL_ENQUIRY'\nlet ai_reply = $input.first().json\nlet course_info = null\n\n// Only resolve course_info if router classified as deep course inquiry\nif(router_value == 'DEEP_INFO_PERSONAL' || router_value == 'DEEP_INFO_CORPORATION') {\n  try {\n    course_info = {\n      attendance_type: $items(\"Deep Course Info1\")[0].json.attendance_type,\n      program_type: $items(\"Deep Course Info1\")[0].json.program_type,\n      name: $items(\"Deep Course Info1\")[0].json.program_name_ar\n    }\n  } catch(e) {\n    course_info = null\n  }\n}\n\nreturn [{json:{\n  source,\n  sessionId,\n  chatInput,\n  router_value,\n  course_info,\n  ai_reply: typeof ai_reply === 'string' ? ai_reply : JSON.stringify(ai_reply)\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14800,
+        5616
+      ],
+      "id": "0d579a20-f3f6-4d06-b238-94bc294fe926",
+      "name": "Code in JavaScript35"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{  $('Smart Router Input1').first().json.source }}",
+                    "rightValue": "n8n-chat",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ee0ab571-5b80-45ac-a073-3900b74df161"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "292db052-a043-41b8-a6ef-5569d8df6d68",
+                    "leftValue": "={{ $('Smart Router Input1').first().json.source }}",
+                    "rightValue": "messenger",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "eca3819e-30e3-44d1-82e6-b34f66377856",
+                    "leftValue": "={{ $('Smart Router Input1').first().json.source }}",
+                    "rightValue": "instagram_messages",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "80b5d349-57e8-4afc-be85-fccf011c0e35",
+                    "leftValue": "={{  $('Smart Router Input1').first().json.source }}",
+                    "rightValue": "facebook_comments",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "9d7f7dd3-dc89-4c36-9d1b-01840abb3150",
+                    "leftValue": "={{  $('Smart Router Input1').first().json.source }}",
+                    "rightValue": "whatsapp_messages",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "fa951fbc-b350-42da-aad6-1f0b54d50fdf",
+                    "leftValue": "={{  $('Smart Router Input1').first().json.source }}",
+                    "rightValue": "telegram_messages",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        17056,
+        5536
+      ],
+      "id": "4de3d006-a004-47a8-bdeb-244ba199bb07",
+      "name": "Switch8"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.id, c.facebook_conversation_id, c.lead_id INTO @conversation_id, @fb_conv_id, @lead_id\nFROM facebook_conversations c\nJOIN crm_lead_social_profiles p ON p.crm_lead_id = c.lead_id\nWHERE p.platform = 'facebook' AND p.platform_user_id = '{{ $('Message Preparer6').first().json.sessionId }}'\nORDER BY c.id DESC LIMIT 1;\n\nINSERT INTO facebook_messages(facebook_message_id, facebook_conversation_id, conversation_id, lead_id, sender, message_text, reply_to_message_id, created_time)\nVALUES ('{{ $json.message_id }}', @fb_conv_id, @conversation_id, @lead_id, 'agent', '{{ $('HTTP Request1').first().json.toString() }}', NULL, NOW());",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        18080,
+        5680
+      ],
+      "id": "769d5679-c458-45b8-959f-eacf465a63f0",
+      "name": "Execute a SQL query25",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6ab3b7ac-8236-4133-b2dc-f28b43afdec7",
+              "leftValue": "={{ $('HTTP Request1').first().json }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        16800,
+        5584
+      ],
+      "id": "41ec47c5-edde-4df9-a0ba-4a8f940057c7",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "content": "## Instagram WebHooks\n**Listent For Messages and Comments** ",
+        "height": 416,
+        "width": 1296,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        12368,
+        7264
+      ],
+      "typeVersion": 1,
+      "id": "4b341cc8-3d7f-42ac-85a2-b57a6ef29b12",
+      "name": "Sticky Note39"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = items[0].json.body;\nconst entry = body.entry[0];\n\n// 1. Handle Direct Messages (DMs)\nif (entry.messaging) {\n  const messaging = entry.messaging[0];\n  \n  // Optional: Skip \"echoes\" (messages sent by you/the bot) to prevent infinite loops\n  if (messaging.message.attachments && messaging.message.attachments[0].type==\"share\") {\n     return [{ json: { event_type: \"share\", data: messaging } }];\n  }\n  if (messaging.message && messaging.message.is_echo) {\n     return [{ json: { event_type: \"messages\", data: messaging } }];\n  }\n\n  return [{ \n    json: { \n      event_type: \"messages\", \n      text: messaging.message?.text,\n      sender_id: messaging.sender?.id,\n      data: messaging \n    } \n  }];\n}\n\n// 2. Handle Comments\nif (entry.changes) {\n  const change = entry.changes[0];\n  \n  if (change.field === \"comments\") {\n    return [{ \n      json: { \n        event_type: \"comments\", \n        text: change.value?.text,\n        username: change.value?.from?.username,\n        data: change.value \n      } \n    }];\n  }\n}\n\n// 3. Fallback\nreturn [{ json: { event_type: \"unknown\", data: entry } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12816,
+        7376
+      ],
+      "id": "6ed2250c-e427-44f5-8f29-cf699b9ebfc8",
+      "name": "Prepare Data to Switch5"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "messages",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "dcf93495-180b-4a5d-a01c-77891beadfc2"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "26347a6b-17ba-4ccb-a5f5-f39b6c6313e7",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "comments",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4d82da8c-8a62-4677-9e02-789c7ef8543f",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_reaction",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "b7b3d80a-4d40-43dc-a393-2a7edb0c5b4b",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "53ddb804-7404-4eb8-ba6f-b225f442444c",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_edited",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "30f925db-53ee-4419-91b5-b7421f5dcae8",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_deleted",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "ba6eb612-0300-444b-90d6-62cbf5a4e2e4",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "share",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        13360,
+        7360
+      ],
+      "id": "9b8c7190-5a82-439d-bb9e-ba6e76a8aaaa",
+      "name": "Switch9"
+    },
+    {
+      "parameters": {
+        "path": "96df6e04-bd68-4737-b0ee-c20af39c65c3",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        12384,
+        7552
+      ],
+      "id": "d07e15b5-970d-410a-8b25-545cba1fa23a",
+      "name": "Get webhook3",
+      "webhookId": "96df6e04-bd68-4737-b0ee-c20af39c65c3"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        12672,
+        7552
+      ],
+      "id": "3d9cf75c-3f15-4b14-8c66-3d5fb44ef1ba",
+      "name": "Challenge Response3"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "71e9fedf-59ca-4256-92b9-2f999c6bae57",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        12496,
+        7376
+      ],
+      "id": "7c3e1e2c-daf4-4ee3-84e2-d760b789e469",
+      "name": "Post webhook3",
+      "webhookId": "71e9fedf-59ca-4256-92b9-2f999c6bae57"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const payload = item.json.data || {};\n  const msg = payload.message || {};\n  let content = '';\n  if (msg.text) {\n    content = msg.text;\n  } else if (msg.attachments && msg.attachments.length > 0) {\n    content = msg.attachments[0].payload.url;\n  }\n\n  return {\n    json: {\n      instagram_id: msg.mid,\n      sender_id: payload.sender?.id,\n      recipient_id: payload.recipient?.id,\n      clean_text: content,\n      // EXTRACTION OF REPLY ID:\n      replying_to_id: msg.message?.reply_to?.mid || null, \n      sessionId:payload.sender?.id,\n      timestamp: new Date(parseInt(payload.timestamp) * 1000).toISOString().slice(0, 19).replace('T', ' ')\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13744,
+        6320
+      ],
+      "id": "4eb62663-4987-40c5-9b4d-fa1d990ffc45",
+      "name": "Message Preparer7"
+    },
+    {
+      "parameters": {
+        "content": "## Instgaram Messages",
+        "height": 464,
+        "width": 1088
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        13712,
+        6032
+      ],
+      "typeVersion": 1,
+      "id": "98e1d9a0-c8a8-4b52-9d3a-2943b9877103",
+      "name": "Sticky Note40"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  (SELECT JSON_OBJECT('sender', sender_id, 'message_text', message_text) \n   FROM instagram_messages \n   WHERE instagram_message_id = '{{ $json.replying_to_id }}' \n   LIMIT 1) AS replying_message,\n  \n  (SELECT JSON_OBJECT('display_name', display_name, 'profile_pic', profile_pic, 'gender', gender) \n   FROM crm_lead_social_profiles \n   WHERE platform = 'instagram' \n   AND platform_user_id = '{{ $json.sender_id }}' \n   LIMIT 1) AS profile;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        13904,
+        6320
+      ],
+      "id": "5a948550-bd42-46ef-8e06-30fed70d8179",
+      "name": "Execute a SQL query26",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $input.first().json\n\nreturn [{json:{\n  profile:result.profile,\n  replying_message:result.replying_message,\n  sender_id:$items(\"Message Preparer7\")[0].json.sender_id, access_token:\"IGAAQ6l6Gltb1BZAGEtUjA4ckV0M3ZAIVEhmeWR1UG1tdmxNVGxVU1Y4MmVFRjJZAOHdXb1ZAaQV8yQndTNzJNSlZA0RlNnWnpyT0NJY2FuRkFObnR1MWpkUThMRHFxbDVmRE9zQWUyajhINjQ5U2hmODVHcGJNUVphTWI5ZAFo4WENtawZDZD\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14080,
+        6320
+      ],
+      "id": "170e3da6-6954-4aac-8ab8-b630cda223e0",
+      "name": "Code in JavaScript36"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.instagram.com/{{ $json.sender_id }}?fields=name,username,profile_pic,follower_count,is_verified_user,is_user_follow_business,is_business_follow_user",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "=IGAAQ6l6Gltb1BZAGEtUjA4ckV0M3ZAIVEhmeWR1UG1tdmxNVGxVU1Y4MmVFRjJZAOHdXb1ZAaQV8yQndTNzJNSlZA0RlNnWnpyT0NJY2FuRkFObnR1MWpkUThMRHFxbDVmRE9zQWUyajhINjQ5U2hmODVHcGJNUVphTWI5ZAFo4WENtawZDZD"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        13776,
+        6144
+      ],
+      "id": "d5e1fabe-6c4d-4820-961f-7c7be855f7ab",
+      "name": "HTTP Request20"
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $items(\"HTTP Request20\")[0].json\nlet conversation_id = $input.first().json.data[0].id\n\nlet profile = {\n  \"display_name\":result.name,\n  \"profile_pic\":result.profile_pic,\n  \"gender\":result.gender,\n  \"locale\":result.locale,\n  \"timezone\":result.timezone,\n}\n\n\nreturn [{json:{\n  conversation_id,\n  profile\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14096,
+        6144
+      ],
+      "id": "eb0355c6-985d-47d2-af6f-8fa6fa43ae72",
+      "name": "Code in JavaScript37"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) VALUES (\"instagram\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\nset @lead_id = LAST_INSERT_ID();\n\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, display_name, profile_pic, locale) VALUES (@lead_id, \"instagram\", '{{ $('Message Preparer1').item.json.sender_id }}','{{ $json.profile.display_name }}','{{ $json.profile.profile_pic }}','{{ $json.profile.locale }}');\n\n\nINSERT INTO instagram_conversations(instagram_user_id, instagram_conversation_id, lead_id, message_count, unread_count,last_message_time) VALUES ({{ $('Message Preparer1').item.json.sender_id }},'{{$json.conversation_id}}',@lead_id,1,0,CURRENT_TIMESTAMP);\n\nINSERT INTO instagram_messages(sender_id,instagram_message_id, conversation_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer1').item.json.sender_id }}','{{ $('Message Preparer1').item.json.instagram_id }}',LAST_INSERT_ID(),'user','{{ $('Message Preparer1').item.json.clean_text }}',{{ $('Message Preparer1').item.json.replying_to_id ? \"'\" + $('Message Preparer1').item.json.replying_to_id + \"'\" : 'NULL'  }},CURRENT_TIMESTAMP);\n\n\n\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14272,
+        6144
+      ],
+      "id": "4f4ad1c1-b110-4602-b5d5-732552184f65",
+      "name": "Execute a SQL query27",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.instagram.com/v24.0/me/conversations?user_id={{ $('Message Preparer7').item.json.sessionId }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "=IGAAQ6l6Gltb1BZAGEtUjA4ckV0M3ZAIVEhmeWR1UG1tdmxNVGxVU1Y4MmVFRjJZAOHdXb1ZAaQV8yQndTNzJNSlZA0RlNnWnpyT0NJY2FuRkFObnR1MWpkUThMRHFxbDVmRE9zQWUyajhINjQ5U2hmODVHcGJNUVphTWI5ZAFo4WENtawZDZD"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        13936,
+        6144
+      ],
+      "id": "5fb0f890-a033-496d-b594-ce6bba4db9da",
+      "name": "HTTP Request21"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1a78ee83-2df9-4b20-85e2-46e1b0c07d81",
+              "leftValue": "={{ $json.profile }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        14256,
+        6320
+      ],
+      "id": "48cc8029-3585-44eb-a1c6-cd51283520a1",
+      "name": "Has Old Messages7"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id into @conversation_id from instagram_conversations where instagram_user_id = '{{ $('Message Preparer1').item.json.sender_id }}' order by id desc limit 1;\n\nINSERT INTO instagram_messages(sender_id,instagram_message_id, conversation_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer1').item.json.sender_id }}','{{ $('Message Preparer1').item.json.instagram_id }}',LAST_INSERT_ID(),'user','{{ $('Message Preparer1').item.json.clean_text }}',{{ $('Message Preparer1').item.json.replying_to_id ? \"'\" + $('Message Preparer1').item.json.replying_to_id + \"'\" : 'NULL'  }},CURRENT_TIMESTAMP);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14448,
+        6304
+      ],
+      "id": "38b778b7-d4a7-4ad8-be06-ca04506139af",
+      "name": "Execute a SQL query28",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "var data = $items(\"Message Preparer7\")[0].json\nreturn [{json:{\n  sessionId:data.sessionId,\n  chatInput:data.clean_text,\n  page_id:data.sender_id,\n  source:\"instagram_messages\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14592,
+        6144
+      ],
+      "id": "b1b64711-cded-465f-9346-4f41ca0e832a",
+      "name": "To Router Preparer7"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const payload = item.json.data || {};\n  const msg = payload.message || {};\n  \n  let content = '';\n  if (msg.text) {\n    content = payload.text;\n  } else if (msg.attachments && msg.attachments.length > 0) {\n    content = msg.attachments[0].payload.url;\n  }\n\n  return {\n    json: {\n      comment_id: payload.id,\n      parent_commnet_id:payload.parent_id,\n      from_id: payload.from?.id,\n      recipient_id: payload.from?.id,\n      comment: payload.text,\n      // EXTRACTION OF REPLY ID:\n      replying_to_id: null, \n      media_id:payload.media.id,\n      media_type:payload.media.media_product_type,\n      sessionId:payload.sender?.id\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13776,
+        6832
+      ],
+      "id": "7ec19992-18de-42a2-bea6-8e49f2241198",
+      "name": "Message Preparer8"
+    },
+    {
+      "parameters": {
+        "content": "## Instgaram Comments",
+        "height": 416,
+        "width": 1088
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        13728,
+        6592
+      ],
+      "typeVersion": 1,
+      "id": "483dd91c-1230-442a-87d9-18e4b76ceb75",
+      "name": "Sticky Note41"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  (SELECT JSON_OBJECT('sender', sender_id, 'message_text', message_text) \n   FROM instagram_messages \n   WHERE instagram_message_id = '{{ $json.replying_to_id }}' \n   LIMIT 1) AS replying_message,\n  \n  (SELECT JSON_OBJECT('display_name', display_name, 'profile_pic', profile_pic,'lead_id',crm_lead_id) \n   FROM crm_lead_social_profiles \n   WHERE platform = 'instagram' \n   AND platform_user_id = '{{ $json.from_id }}' \n   LIMIT 1) AS profile;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        13936,
+        6832
+      ],
+      "id": "12abe83f-36d2-4039-a294-373523001d44",
+      "name": "Execute a SQL query29",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $input.first().json\n\nreturn [{json:{\n  profile:result.profile,\n  replying_message:result.replying_message,\n  sender_id:$items(\"Message Preparer8\")[0].json.from_id\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14112,
+        6832
+      ],
+      "id": "97658a99-45c3-4f0d-b9c8-5fa153ed2f63",
+      "name": "Code in JavaScript38"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.instagram.com/{{ $json.sender_id }}?fields=name,username,profile_pic,follower_count,is_verified_user,is_user_follow_business,is_business_follow_user",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "={{$('Code in JavaScript38').item.access_token}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        13808,
+        6656
+      ],
+      "id": "d442073f-d39b-4bc1-bd10-5cb140782833",
+      "name": "HTTP Request22"
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $items(\"HTTP Request22\")[0].json\nlet conversation_id = $input.first().json.data[0].id\n\nlet profile = {\n  \"display_name\":result.name,\n  \"profile_pic\":result.profile_pic,\n  \"gender\":result.gender,\n  \"locale\":result.locale,\n  \"timezone\":result.timezone,\n}\n\n\nreturn [{json:{\n  conversation_id,\n  profile\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14128,
+        6656
+      ],
+      "id": "024c8bd1-8597-4edf-bb6e-d82e7053dd10",
+      "name": "Code in JavaScript39"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- 1. Create the lead\nINSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) \nVALUES (\"instagram\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\n-- 2. Insert social profile using the ID from the previous insert\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, display_name, profile_pic) \nVALUES (LAST_INSERT_ID(), \"instagram\", '{{ $('Message Preparer2').item.json.from_id }}','{{ $json.profile.display_name }}','{{ $json.profile.profile_pic }}');\n\n-- 3. Insert comment using the SAME ID (it won't change until another INSERT happens)\nINSERT INTO instagram_post_comments(instagram_comment_id, instagram_post_id, parent_comment_id, message, lead_id, created_time) \nVALUES ('{{ $('Message Preparer2').item.json.comment_id }}','{{ $('Message Preparer2').item.json.media_id }}', {{ $('Message Preparer2').item.json.parent_commnet_id ?? 'NULL' }}, '{{ $('Message Preparer2').item.json.comment }}', LAST_INSERT_ID(), CURRENT_TIMESTAMP);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14304,
+        6656
+      ],
+      "id": "126759cb-4adf-407f-afcc-aa8491cd445e",
+      "name": "Execute a SQL query30",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.instagram.com/v24.0/me/conversations?user_id={{ $('Message Preparer8').item.json.from_id }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "={{$('Code in JavaScript38').item.access_token}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        13968,
+        6656
+      ],
+      "id": "f593d6a0-f7e1-436e-a580-e20b46db71ea",
+      "name": "HTTP Request23"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1a78ee83-2df9-4b20-85e2-46e1b0c07d81",
+              "leftValue": "={{ $json.profile }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        14288,
+        6832
+      ],
+      "id": "be47a403-345a-4dd0-b33f-468494e4f5cd",
+      "name": "Has Old Messages8"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO instagram_post_comments(instagram_comment_id,instagram_post_id, parent_comment_id, message,lead_id, created_time) VALUES ('{{ $('Message Preparer2').item.json.comment_id }}','{{ $('Message Preparer2').item.json.media_id }}','{{ $('Message Preparer2').item.json.parent_commnet_id??null }}','{{ $('Message Preparer2').item.json.comment }}',{{ $json.profile.lead_id }},CURRENT_TIMESTAMP);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14480,
+        6816
+      ],
+      "id": "6000c8bf-2391-468b-ba2c-35f9afca5745",
+      "name": "Execute a SQL query31",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "var data = $items(\"Message Preparer8\")[0].json\nreturn [{json:{\n  sessionId:data.from_id,\n  chatInput:data.comment,\n  page_id:data.from_id,\n  source:\"instagram_messages\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14624,
+        6656
+      ],
+      "id": "a12e08ff-9e39-44ab-a7d8-0151f00ad86a",
+      "name": "To Router Preparer8"
+    },
+    {
+      "parameters": {
+        "path": "a2114433-3e96-4ad7-82d5-1bac14ba19b3",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        12544,
+        9328
+      ],
+      "id": "e8b389ce-8210-4bbb-9336-1e115b906266",
+      "name": "Get webhook4",
+      "webhookId": "a2114433-3e96-4ad7-82d5-1bac14ba19b3"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        12944,
+        9328
+      ],
+      "id": "0fd5db98-2f52-4b39-b935-e3ac9241f46c",
+      "name": "Challenge Response4"
+    },
+    {
+      "parameters": {
+        "content": "## Whatsapp WebHooks\n**Listent For Messages and Comments** ",
+        "height": 416,
+        "width": 1296,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        12400,
+        9088
+      ],
+      "typeVersion": 1,
+      "id": "41e7ad91-cc7b-4ae7-be14-6c49979b0c20",
+      "name": "Sticky Note42"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = items[0].json.body;\n  if (body.field === \"messages\") {\n    return [{ \n      json: { \n        event_type: \"whatsapp_message\", \n        messages: body.value?.messages,\n        username: body.value?.contacts?.profile?.name,\n        metadata: body.value?.metadata\n      } \n    }];\n}\n\n// 3. Fallback\nreturn [{ json: { event_type: \"unknown\", data: body } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12800,
+        9152
+      ],
+      "id": "290c92e3-ccc6-4f32-9d4b-7fe490c109de",
+      "name": "Prepare Data to Switch6"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "whatsapp_message",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "dcf93495-180b-4a5d-a01c-77891beadfc2"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "26347a6b-17ba-4ccb-a5f5-f39b6c6313e7",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "comments",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4d82da8c-8a62-4677-9e02-789c7ef8543f",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_reaction",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "b7b3d80a-4d40-43dc-a393-2a7edb0c5b4b",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "53ddb804-7404-4eb8-ba6f-b225f442444c",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_edited",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "30f925db-53ee-4419-91b5-b7421f5dcae8",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_deleted",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        13168,
+        9104
+      ],
+      "id": "d3ddd387-2a8f-408e-a996-7122501097de",
+      "name": "Switch10"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "0ea1c427-7152-44cd-82b7-f7375b3ee3ee",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        12576,
+        9152
+      ],
+      "id": "3f75075a-8093-4f2b-9821-946360c69c10",
+      "name": "Post webhook4",
+      "webhookId": "0ea1c427-7152-44cd-82b7-f7375b3ee3ee"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const payload = item.json.data || {};\n  const msg = payload.message || {};\n  \n  let content = '';\n  if (msg.text) {\n    content = payload.text;\n  } else if (msg.attachments && msg.attachments.length > 0) {\n    content = msg.attachments[0].payload.url;\n  }\n\n  return {\n    json: {\n      comment_id: payload.id,\n      parent_commnet_id:payload.parent_id,\n      from_id: payload.from?.id,\n      recipient_id: payload.from?.id,\n      comment: payload.text,\n      // EXTRACTION OF REPLY ID:\n      replying_to_id: null, \n      media_id:payload.media.id,\n      media_type:payload.media.media_product_type,\n      sessionId:payload.sender?.id\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13952,
+        7472
+      ],
+      "id": "02ca9bcc-ad6c-4625-81a6-9f52545c66f9",
+      "name": "Message Preparer9"
+    },
+    {
+      "parameters": {
+        "content": "## Instgaram post insights",
+        "height": 416,
+        "width": 1088
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        13904,
+        7232
+      ],
+      "typeVersion": 1,
+      "id": "3125b20d-2c2e-4141-aa03-2839c10a4545",
+      "name": "Sticky Note43"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  (SELECT JSON_OBJECT('sender', sender_id, 'message_text', message_text) \n   FROM instagram_messages \n   WHERE instagram_message_id = '{{ $json.replying_to_id }}' \n   LIMIT 1) AS replying_message,\n  \n  (SELECT JSON_OBJECT('display_name', display_name, 'profile_pic', profile_pic,'lead_id',crm_lead_id) \n   FROM crm_lead_social_profiles \n   WHERE platform = 'instagram' \n   AND platform_user_id = '{{ $json.from_id }}' \n   LIMIT 1) AS profile;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14112,
+        7472
+      ],
+      "id": "9443fc63-a082-4c71-8236-dcd659e36e49",
+      "name": "Execute a SQL query32",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $input.first().json\n\nreturn [{json:{\n  profile:result.profile,\n  replying_message:result.replying_message,\n  sender_id:$items(\"Message Preparer9\")[0].json.from_id,\n  access_token:\"IGAAQ6l6Gltb1BZAGEtUjA4ckV0M3ZAIVEhmeWR1UG1tdmxNVGxVU1Y4MmVFRjJZAOHdXb1ZAaQV8yQndTNzJNSlZA0RlNnWnpyT0NJY2FuRkFObnR1MWpkUThMRHFxbDVmRE9zQWUyajhINjQ5U2hmODVHcGJNUVphTWI5ZAFo4WENtawZDZD\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14288,
+        7472
+      ],
+      "id": "acd94b72-f566-4f8a-b312-9fff3e3ecdcb",
+      "name": "Code in JavaScript40"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.instagram.com/{{ $json.sender_id }}?fields=name,username,profile_pic,follower_count,is_verified_user,is_user_follow_business,is_business_follow_user",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "={{$('Code in JavaScript40').item.access_token}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        13984,
+        7296
+      ],
+      "id": "c8520051-ec24-41eb-be11-c499de7c3922",
+      "name": "HTTP Request24"
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $items(\"HTTP Request24\")[0].json\nlet conversation_id = $input.first().json.data[0].id\n\nlet profile = {\n  \"display_name\":result.name,\n  \"profile_pic\":result.profile_pic,\n  \"gender\":result.gender,\n  \"locale\":result.locale,\n  \"timezone\":result.timezone,\n}\n\n\nreturn [{json:{\n  conversation_id,\n  profile\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14304,
+        7296
+      ],
+      "id": "60bdae95-16a3-423c-94b6-01c81aa4969b",
+      "name": "Code in JavaScript41"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- 1. Create the lead\nINSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) \nVALUES (\"instagram\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\n-- 2. Insert social profile using the ID from the previous insert\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, display_name, profile_pic) \nVALUES (LAST_INSERT_ID(), \"instagram\", '{{ $('Message Preparer2').item.json.from_id }}','{{ $json.profile.display_name }}','{{ $json.profile.profile_pic }}');\n\n-- 3. Insert comment using the SAME ID (it won't change until another INSERT happens)\nINSERT INTO instagram_post_comments(instagram_comment_id, instagram_post_id, parent_comment_id, message, lead_id, created_time) \nVALUES ('{{ $('Message Preparer2').item.json.comment_id }}','{{ $('Message Preparer2').item.json.media_id }}', {{ $('Message Preparer2').item.json.parent_commnet_id ?? 'NULL' }}, '{{ $('Message Preparer2').item.json.comment }}', LAST_INSERT_ID(), CURRENT_TIMESTAMP);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14480,
+        7296
+      ],
+      "id": "70f99c3c-df9e-45d9-9964-c0943a100e67",
+      "name": "Execute a SQL query33",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.instagram.com/v24.0/me/conversations?user_id={{ $('Message Preparer9').item.json.from_id }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "={{$('Code in JavaScript40').item.access_token}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        14144,
+        7296
+      ],
+      "id": "d70faee6-075d-412c-8574-edc1a5d48df6",
+      "name": "HTTP Request25"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1a78ee83-2df9-4b20-85e2-46e1b0c07d81",
+              "leftValue": "={{ $json.profile }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        14464,
+        7472
+      ],
+      "id": "faacc266-be0e-4f65-bbb1-8534707c7743",
+      "name": "Has Old Messages9"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO instagram_post_comments(instagram_comment_id,instagram_post_id, parent_comment_id, message,lead_id, created_time) VALUES ('{{ $('Message Preparer2').item.json.comment_id }}','{{ $('Message Preparer2').item.json.media_id }}','{{ $('Message Preparer2').item.json.parent_commnet_id??null }}','{{ $('Message Preparer2').item.json.comment }}',{{ $json.profile.lead_id }},CURRENT_TIMESTAMP);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14656,
+        7456
+      ],
+      "id": "8e90ad38-e7f6-4089-beb2-573d057d03e4",
+      "name": "Execute a SQL query34",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "var data = $items(\"Message Preparer9\")[0].json\nreturn [{json:{\n  sessionId:data.from_id,\n  chatInput:data.comment,\n  page_id:data.from_id,\n  source:\"instagram_messages\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14800,
+        7296
+      ],
+      "id": "6d9f327a-d127-4184-b2ac-1bed348972db",
+      "name": "To Router Preparer9"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.instagram.com/v21.0/17841479715413345/messages",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"recipient\": {\n    \"id\": \"{{ $('Smart Router Input1').first().json.sessionId }}\"\n  },\n  \"message\": {\n    \"text\": {{ JSON.stringify($json.output) }}\n  },\n  \"access_token\": \"IGAAQ6l6Gltb1BZAGEtUjA4ckV0M3ZAIVEhmeWR1UG1tdmxNVGxVU1Y4MmVFRjJZAOHdXb1ZAaQV8yQndTNzJNSlZA0RlNnWnpyT0NJY2FuRkFObnR1MWpkUThMRHFxbDVmRE9zQWUyajhINjQ5U2hmODVHcGJNUVphTWI5ZAFo4WENtawZDZD\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        17424,
+        6272
+      ],
+      "id": "cb6b10c5-68f0-4ab3-9807-bf71d497c7a1",
+      "name": "HTTP Request26"
+    },
+    {
+      "parameters": {
+        "path": "06240181-dedb-40d9-b2ea-482f316c3796",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        12496,
+        8560
+      ],
+      "id": "bc2305d2-99d4-42cb-a752-2103d151c8d3",
+      "name": "Get webhook5",
+      "webhookId": "06240181-dedb-40d9-b2ea-482f316c3796"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        12896,
+        8560
+      ],
+      "id": "3b297321-d790-4a5e-9e39-2e1e8471ddff",
+      "name": "Challenge Response5"
+    },
+    {
+      "parameters": {
+        "content": "## Tiktok WebHooks\n**Listent For Messages and Comments** ",
+        "height": 416,
+        "width": 1296,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        12352,
+        8304
+      ],
+      "typeVersion": 1,
+      "id": "5c6eefc6-4339-42fb-90f7-335be626cc52",
+      "name": "Sticky Note44"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = items[0].json.body;\nconst entry = body.entry[0];\n\n// 1. Handle Direct Messages (DMs)\nif (entry.messaging) {\n  const messaging = entry.messaging[0];\n  \n  // Optional: Skip \"echoes\" (messages sent by you/the bot) to prevent infinite loops\n  if (messaging.message) {\n     return [{ json: { event_type: \"messages\", data: messaging } }];\n  }\n\n  return [{ \n    json: { \n      event_type: \"messages\", \n      text: messaging.message?.text,\n      sender_id: messaging.sender?.id,\n      data: messaging \n    } \n  }];\n}\n\n// 2. Handle Comments\nif (entry.changes) {\n  const change = entry.changes[0];\n  \n  if (change.field === \"comments\") {\n    return [{ \n      json: { \n        event_type: \"comments\", \n        text: change.value?.text,\n        username: change.value?.from?.username,\n        data: change.value \n      } \n    }];\n  }\n}\n\n// 3. Fallback\nreturn [{ json: { event_type: \"unknown\", data: entry } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12752,
+        8384
+      ],
+      "id": "03efd195-b327-4826-9a65-19472206bf24",
+      "name": "Prepare Data to Switch7"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "messages",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "dcf93495-180b-4a5d-a01c-77891beadfc2"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "26347a6b-17ba-4ccb-a5f5-f39b6c6313e7",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "comments",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4d82da8c-8a62-4677-9e02-789c7ef8543f",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_reaction",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "b7b3d80a-4d40-43dc-a393-2a7edb0c5b4b",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "53ddb804-7404-4eb8-ba6f-b225f442444c",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_edited",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "30f925db-53ee-4419-91b5-b7421f5dcae8",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_deleted",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        13120,
+        8336
+      ],
+      "id": "5211aaf0-3bf6-4df9-8917-b87bcf065117",
+      "name": "Switch11"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cffefbaf-bfb5-429a-b688-56be6d109935",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        12528,
+        8384
+      ],
+      "id": "c613f9f6-aca2-4315-9a55-a256db6879f5",
+      "name": "Post webhook5",
+      "webhookId": "cffefbaf-bfb5-429a-b688-56be6d109935"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id into @conversation_id from instagram_conversations where instagram_user_id = '{{ $('Message Preparer1').first().json.sessionId }}' order by id desc limit 1;\n\nINSERT INTO instagram_messages(sender_id,instagram_message_id, conversation_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer1').first().json.sessionId }}','{{ $json.message_id }}',@conversation_id,'agent','{{ $('AI Agent').first().json.output }}',NULL , now());",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        17696,
+        6272
+      ],
+      "id": "fc9772e9-aefd-4ebd-a8f3-badc323ac47c",
+      "name": "Execute a SQL query35",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const payload = item.json.data || {};\n  const msg = payload.message || {};\n  let content = '';\n  if (msg.text) {\n    content = msg.text;\n  } else if (msg.attachments && msg.attachments.length > 0) {\n    content = msg.attachments[0].payload.url;\n  }\n\n  return {\n    json: {\n      instagram_id: msg.mid,\n      sender_id: payload.sender?.id,\n      recipient_id: payload.recipient?.id,\n      clean_text: content,\n      // EXTRACTION OF REPLY ID:\n      replying_to_id: msg.message?.reply_to?.mid || null, \n      sessionId:payload.sender?.id,\n      timestamp: new Date(parseInt(payload.timestamp) * 1000).toISOString().slice(0, 19).replace('T', ' ')\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14144,
+        8544
+      ],
+      "id": "d7fcaff8-e64d-4f56-8fdc-968dafd5d9b1",
+      "name": "Message Preparer10"
+    },
+    {
+      "parameters": {
+        "content": "## Tiktok Messages",
+        "height": 448,
+        "width": 1126
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        14096,
+        8304
+      ],
+      "typeVersion": 1,
+      "id": "22ab9d4a-f321-428b-a43f-b22308ff3643",
+      "name": "Sticky Note45"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  (SELECT JSON_OBJECT('sender', sender_id, 'message_text', message_text) \n   FROM tiktok_messages \n   WHERE tiktok_message_id = '{{ $json.replying_to_id }}' \n   LIMIT 1) AS replying_message,\n  \n  (SELECT JSON_OBJECT('display_name', display_name, 'profile_pic', profile_pic, 'gender', gender) \n   FROM crm_lead_social_profiles \n   WHERE platform = 'instagram' \n   AND platform_user_id = '{{ $json.sender_id }}' \n   LIMIT 1) AS profile;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14304,
+        8544
+      ],
+      "id": "35611897-c084-42ff-8061-24f69233bb8c",
+      "name": "Execute a SQL query36",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $input.first().json\n\nreturn [{json:{\n  profile:result.profile,\n  replying_message:result.replying_message,\n  sender_id:$items(\"Message Preparer10\")[0].json.sender_id, access_token:\"IGAAQ6l6Gltb1BZAGEtUjA4ckV0M3ZAIVEhmeWR1UG1tdmxNVGxVU1Y4MmVFRjJZAOHdXb1ZAaQV8yQndTNzJNSlZA0RlNnWnpyT0NJY2FuRkFObnR1MWpkUThMRHFxbDVmRE9zQWUyajhINjQ5U2hmODVHcGJNUVphTWI5ZAFo4WENtawZDZD\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14480,
+        8544
+      ],
+      "id": "cdd6b520-6c8b-46b6-8f17-ceafdc6961e9",
+      "name": "Code in JavaScript42"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.instagram.com/{{ $json.sender_id }}?fields=name,username,profile_pic,follower_count,is_verified_user,is_user_follow_business,is_business_follow_user",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "=IGAAQ6l6Gltb1BZAGEtUjA4ckV0M3ZAIVEhmeWR1UG1tdmxNVGxVU1Y4MmVFRjJZAOHdXb1ZAaQV8yQndTNzJNSlZA0RlNnWnpyT0NJY2FuRkFObnR1MWpkUThMRHFxbDVmRE9zQWUyajhINjQ5U2hmODVHcGJNUVphTWI5ZAFo4WENtawZDZD"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        14176,
+        8368
+      ],
+      "id": "211fdd0e-c893-42a9-a568-95fc64b3184d",
+      "name": "HTTP Request27"
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $items(\"HTTP Request27\")[0].json\nlet conversation_id = $input.first().json.data[0].id\n\nlet profile = {\n  \"display_name\":result.name,\n  \"profile_pic\":result.profile_pic,\n  \"gender\":result.gender,\n  \"locale\":result.locale,\n  \"timezone\":result.timezone,\n}\n\n\nreturn [{json:{\n  conversation_id,\n  profile\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14496,
+        8368
+      ],
+      "id": "74e27ddc-fc18-47c5-b8de-9d2deb5aaa97",
+      "name": "Code in JavaScript43"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) VALUES (\"instagram\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\nset @lead_id = LAST_INSERT_ID();\n\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, display_name, profile_pic, locale) VALUES (@lead_id, \"instagram\", '{{ $('Message Preparer1').item.json.sender_id }}','{{ $json.profile.display_name }}','{{ $json.profile.profile_pic }}','{{ $json.profile.locale }}');\n\n\nINSERT INTO tiktok_conversations(tiktok_user_id, tiktok_conversation_id, lead_id, message_count, unread_count,last_message_time) VALUES ({{ $('Message Preparer1').item.json.sender_id }},'{{$json.conversation_id}}',@lead_id,1,0,CURRENT_TIMESTAMP);\n\nINSERT INTO tiktok_messages(sender_id,tiktok_message_id, conversation_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer1').item.json.sender_id }}','{{ $('Message Preparer1').item.json.instagram_id }}',LAST_INSERT_ID(),'user','{{ $('Message Preparer1').item.json.clean_text }}',{{ $('Message Preparer1').item.json.replying_to_id ? \"'\" + $('Message Preparer1').item.json.replying_to_id + \"'\" : 'NULL'  }},CURRENT_TIMESTAMP);\n\n\n\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14672,
+        8368
+      ],
+      "id": "d833bbad-8cf6-4c43-ad46-d5bda489f1dc",
+      "name": "Execute a SQL query37",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.instagram.com/v24.0/me/conversations?user_id={{ $('Message Preparer10').item.json.sessionId }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "=IGAAQ6l6Gltb1BZAGEtUjA4ckV0M3ZAIVEhmeWR1UG1tdmxNVGxVU1Y4MmVFRjJZAOHdXb1ZAaQV8yQndTNzJNSlZA0RlNnWnpyT0NJY2FuRkFObnR1MWpkUThMRHFxbDVmRE9zQWUyajhINjQ5U2hmODVHcGJNUVphTWI5ZAFo4WENtawZDZD"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        14336,
+        8368
+      ],
+      "id": "4dba25b1-6ba4-41ed-9f25-d14b8c9b1b61",
+      "name": "HTTP Request28"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1a78ee83-2df9-4b20-85e2-46e1b0c07d81",
+              "leftValue": "={{ $json.profile }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        14656,
+        8544
+      ],
+      "id": "09d64ed3-2467-4e30-b6e6-23e6c58881ba",
+      "name": "Has Old Messages10"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id into @conversation_id from tiktok_conversations where tiktok_user_id = '{{ $('Message Preparer1').item.json.sender_id }}' order by id desc limit 1;\n\nINSERT INTO tiktok_messages(sender_id,tiktok_message_id, conversation_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer1').item.json.sender_id }}','{{ $('Message Preparer1').item.json.instagram_id }}',LAST_INSERT_ID(),'user','{{ $('Message Preparer1').item.json.clean_text }}',{{ $('Message Preparer1').item.json.replying_to_id ? \"'\" + $('Message Preparer1').item.json.replying_to_id + \"'\" : 'NULL'  }},CURRENT_TIMESTAMP);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14848,
+        8528
+      ],
+      "id": "f28fcd94-5804-4204-8611-60cf7d16d1b2",
+      "name": "Execute a SQL query38",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "var data = $items(\"Message Preparer10\")[0].json\nreturn [{json:{\n  sessionId:data.sessionId,\n  chatInput:data.clean_text,\n  page_id:data.sender_id,\n  source:\"instagram_messages\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14992,
+        8368
+      ],
+      "id": "59cc9c36-b796-46b1-984f-a71ab2ac82d8",
+      "name": "To Router Preparer10"
+    },
+    {
+      "parameters": {
+        "content": "## Tiktok posts",
+        "height": 448,
+        "width": 1126
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        14096,
+        7728
+      ],
+      "typeVersion": 1,
+      "id": "9692d884-d020-4392-af4f-ae068d263c4e",
+      "name": "Sticky Note46"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const payload = item.json.data || {};\n  const msg = payload.message || {};\n  let content = '';\n  if (msg.text) {\n    content = msg.text;\n  } else if (msg.attachments && msg.attachments.length > 0) {\n    content = msg.attachments[0].payload.url;\n  }\n\n  return {\n    json: {\n      instagram_id: msg.mid,\n      sender_id: payload.sender?.id,\n      recipient_id: payload.recipient?.id,\n      clean_text: content,\n      // EXTRACTION OF REPLY ID:\n      replying_to_id: msg.message?.reply_to?.mid || null, \n      sessionId:payload.sender?.id,\n      timestamp: new Date(parseInt(payload.timestamp) * 1000).toISOString().slice(0, 19).replace('T', ' ')\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14176,
+        7920
+      ],
+      "id": "68992c3a-9cb3-4a54-9f73-994137783b51",
+      "name": "Message Preparer11"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  (SELECT JSON_OBJECT('sender', sender_id, 'message_text', message_text) \n   FROM tiktok_messages \n   WHERE tiktok_message_id = '{{ $json.replying_to_id }}' \n   LIMIT 1) AS replying_message,\n  \n  (SELECT JSON_OBJECT('display_name', display_name, 'profile_pic', profile_pic, 'gender', gender) \n   FROM crm_lead_social_profiles \n   WHERE platform = 'instagram' \n   AND platform_user_id = '{{ $json.sender_id }}' \n   LIMIT 1) AS profile;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14432,
+        7920
+      ],
+      "id": "3c85c8a6-8da6-46df-bbfa-f14e5ea0f224",
+      "name": "Execute a SQL query39",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $input.first().json\n\nreturn [{json:{\n  profile:result.profile,\n  replying_message:result.replying_message,\n  sessionId:$items(\"Comment Preparer1\")[0].json.sessionId\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12048,
+        5936
+      ],
+      "id": "b7f7d5c5-5159-4c10-b97e-bea5fda376d8",
+      "name": "Code in JavaScript44"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v24.0/{{ $input.first().json.sessionId }}?fields=name,profile_pic,gender,locale,timezone",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "EAAUN12ysZBckBQBMf2OZAWUVi3NYDddsH4uS4l8juVvVfoI0f9X819TkW3LkencwduPZCYb4efFwjZCVlaIWoB08FZBYRaEl8XU0tlKIW0bNZAy8LnmZC0ZCTla8cDYuQscgpHKmFoAGqhZAeJzSfFKWmMlMq8ZBOdiSL7GgBWWrzEeLzf7bZC0cVxuC8YDKkGpKAkSVErNI5aVjBNH6z7YhEIDyGwS"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        11744,
+        5760
+      ],
+      "id": "b16b88c3-f871-4e61-b8e6-6cf5a149c9bd",
+      "name": "HTTP Request29"
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $items(\"HTTP Request29\")[0].json\nlet conversation_id = $input.first().json.data[0].id\n\nlet profile = {\n  \"display_name\":result.name,\n  \"profile_pic\":result.profile_pic,\n  \"gender\":result.gender,\n  \"locale\":result.locale,\n  \"timezone\":result.timezone,\n}\n\n\nreturn [{json:{\n  conversation_id,\n  profile\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        11984,
+        5760
+      ],
+      "id": "821242ec-5fda-4e0b-8079-68de0bcac370",
+      "name": "Code in JavaScript45"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) VALUES (\"facebook\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\nset @lead_id = LAST_INSERT_ID();\n\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, gender, display_name, profile_pic, locale) VALUES (@lead_id, \"facebook\", '{{ $('Comment Preparer1').item.json.sessionId }}','{{ $json.profile.gender }}','{{ $json.profile.display_name }}','{{ $json.profile.profile_pic }}','{{ $json.profile.locale }}');\n\nINSERT INTO facebook_conversations(facebook_conversation_id, lead_id, message_count, last_message_time) VALUES ('{{ $json.conversation_id }}',@lead_id,1,'{{ new Date($('Comment Preparer1').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');\n\nINSERT INTO facebook_post_comments (\n  facebook_comment_id, \n  facebook_post_id,\n  lead_id,\n  parent_comment_id, \n  message, \n  created_time\n) \nSELECT \n  '{{ $('Comment Preparer1').item.json.comment_id }}',\n  p.id,\n  @lead_id, \n  '{{ $('Comment Preparer1').item.json.parent_comment_id }}',\n  '{{ $('Comment Preparer1').item.json.message }}',\n  FROM_UNIXTIME({{ $('Comment Preparer1').item.json.created_time }})\nFROM facebook_posts p\nWHERE p.facebook_id = '{{ $('Comment Preparer1').item.json.facebook_post_id}}'\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        12240,
+        5760
+      ],
+      "id": "5def5504-69e2-4c63-8add-a50a4642f014",
+      "name": "Execute a SQL query40",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1a78ee83-2df9-4b20-85e2-46e1b0c07d81",
+              "leftValue": "={{ $json.profile }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        12224,
+        5936
+      ],
+      "id": "5eacbb9e-9a98-4227-b2e2-2d091af5544e",
+      "name": "Has Old Messages11"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO facebook_post_comments (\n  facebook_comment_id, \n  facebook_post_id,\n  lead_id,\n  parent_comment_id, \n  message, \n  created_time\n) \nSELECT \n  '{{ $('Comment Preparer1').item.json.comment_id }}',\n  p.id,\n  '{{ $('Code in JavaScript44').item.json.profile.crm_lead_id }}', \n  '{{ $('Comment Preparer1').item.json.parent_comment_id }}', -- Added quotes\n  '{{ $('Comment Preparer1').item.json.message }}',         -- Added quotes\n  FROM_UNIXTIME({{ $('Comment Preparer1').item.json.created_time }})\nFROM facebook_posts p\nWHERE p.facebook_id = '{{ $('Comment Preparer1').item.json.facebook_post_id}}'\nLIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        12416,
+        5920
+      ],
+      "id": "0f500a7a-eb66-4151-9a65-f360458356aa",
+      "name": "Execute a SQL query41",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "var data = $items(\"Comment Preparer1\")[0].json\nreturn [{json:{\n  sessionId:data.sessionId,\n  chatInput:data.chatInput,\n  page_id:data.page_id,\n  source:\"facebook_comments\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12560,
+        5760
+      ],
+      "id": "438351a3-22b6-4ee5-8aed-7ee2d967932f",
+      "name": "To Router Preparer11"
+    },
+    {
+      "parameters": {
+        "content": "## Facebook comments",
+        "height": 368,
+        "width": 1072
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        11632,
+        5712
+      ],
+      "typeVersion": 1,
+      "id": "d322da95-c826-4e42-88ce-095473abb65d",
+      "name": "Sticky Note47"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n(SELECT JSON_OBJECT(\"display_name\",display_name,\"crm_lead_id\",crm_lead_id,\"profile_pic\",profile_pic,\"gender\",gender) from crm_lead_social_profiles where platform = 'facebook' and platform_user_id='{{ $json.sessionId }}') as profile",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        11872,
+        5936
+      ],
+      "id": "a8f7405d-a45a-4b26-a974-aba9e83a91e8",
+      "name": "insert comments to facebook_post_comments1",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nlet msg = $items(\"Prepare Data to Switch4\")[0].json.data\n\nlet comment_id = msg.comment_id\nlet chatInput = msg.message\nlet facebook_post_id= msg.post_id\nlet parent_comment_id = msg.parent_id\nlet message = msg.message\nlet created_time = msg.created_time\n\nlet sessionId = msg.from.id\n// let page_id = msg.recipient.id\n\nreturn [{json:{\n  comment_id,\n  chatInput,\n  facebook_post_id,\n  parent_comment_id,\n  message,\n  created_time,\n  sessionId\n} }]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        11712,
+        5936
+      ],
+      "id": "38838557-dac4-41a5-a02a-2caef9846487",
+      "name": "Comment Preparer1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "86b34f20-760e-42fd-b15e-e4ebc3b4a4dd",
+        "options": {}
+      },
+      "id": "c9ce24d0-5399-4850-a044-92583d93ba5b",
+      "name": "STT Webhook1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        13152,
+        6368
+      ],
+      "webhookId": "86b34f20-760e-42fd-b15e-e4ebc3b4a4dd"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.8.101:8003/stt_url",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"url\": \"https://cdn.fbsbx.com/v/t59.3654-21/610466876_1532704534620915_4257346320119291645_n.mp4/audioclip-1767778882000-3042.mp4?_nc_cat=111&ccb=1-7&_nc_sid=d61c36&_nc_ohc=xYoiBmEK2iUQ7kNvwGOIACA&_nc_oc=Adll-sQ-VTUH9fdgjecufCXtdqs5cYR8wGpXEx3ZnnCe2OUg603BjVTgdoazfG4PNi7LtsQ9llkv7t_JLpq9IsVc&_nc_zt=28&_nc_ht=cdn.fbsbx.com&_nc_gid=b7ONfu_s1gpevryHR_Nkkg&oh=03_Q7cD4QHANqQx_viaWdwmYWDFPfIVqcb8pCz-9iO7hteMIueUbw&oe=69601ABF\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        12912,
+        6368
+      ],
+      "id": "0f0c14d8-2776-4260-80d9-41cbe06d8060",
+      "name": "HTTP Request31"
+    },
+    {
+      "parameters": {
+        "path": "3626c185-0fbb-4287-9eb6-41ebaa5ac524",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        12400,
+        6912
+      ],
+      "id": "f45e8eba-b771-4ac7-b915-a0bab4af85ba",
+      "name": "Get webhook",
+      "webhookId": "3626c185-0fbb-4287-9eb6-41ebaa5ac524"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        12688,
+        6912
+      ],
+      "id": "086c0be8-9f03-49e6-849b-7daaf2c88110",
+      "name": "Challenge Response"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.short_descr_ar \nFROM running_courses rc \nJOIN courses c ON rc.course_id = c.id \nWHERE c.course_type_id = 1 \n  AND rc.start_time >= DATE_ADD(CURRENT_DATE(), INTERVAL -2 DAY) \n  AND c.id IN (SELECT fpc.course_id FROM facebook_post_courses fpc WHERE fpc.facebook_post_id = (SELECT id FROM facebook_posts WHERE facebook_id = 1))\n\nUNION\n\nSELECT w.short_descr_ar \nFROM running_workshops rw \nJOIN workshops w ON rw.workshop_id = w.id \nWHERE w.workshop_type_id = 1 \n  AND rw.start_time >= DATE_ADD(CURRENT_DATE(), INTERVAL -2 DAY) \n  AND w.id IN (SELECT fpw.workshop_id FROM facebook_post_workshops fpw WHERE fpw.facebook_post_id = (SELECT id FROM facebook_posts WHERE facebook_id = 1));",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        16480,
+        6240
+      ],
+      "id": "b13db77b-8d77-43d0-96ca-76c3521983ef",
+      "name": "Reply To Facebook Comments Qurey",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Comments Response On Messenger\n**Sending replies to Messenger, TikTok, Instagram** ",
+        "height": 448,
+        "width": 704
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        16352,
+        6032
+      ],
+      "typeVersion": 1,
+      "id": "4bd91e9e-b060-4263-9e70-38fa4c8efca8",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v24.0/me/messages",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "EAAUN12ysZBckBQBMf2OZAWUVi3NYDddsH4uS4l8juVvVfoI0f9X819TkW3LkencwduPZCYb4efFwjZCVlaIWoB08FZBYRaEl8XU0tlKIW0bNZAy8LnmZC0ZCTla8cDYuQscgpHKmFoAGqhZAeJzSfFKWmMlMq8ZBOdiSL7GgBWWrzEeLzf7bZC0cVxuC8YDKkGpKAkSVErNI5aVjBNH6z7YhEIDyGwS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"recipient\": {\n    \"id\": \"{{ $('Message Preparer6').first().json.sessionId  }}\"\n  },\n  \"messaging_type\": \"RESPONSE\",\n  \"message\": {\n    \"text\": {{ JSON.stringify($('AI Agent3').first().json.output.trim()) }}\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        16736,
+        6224
+      ],
+      "id": "883a0a58-6216-4721-bce0-ee6bdc6f332e",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "content": "## Message Response\n**Sending replies to Messenger, TikTok, Instagram** ",
+        "height": 448,
+        "width": 704
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        17248,
+        6064
+      ],
+      "typeVersion": 1,
+      "id": "86d677bb-3282-4024-a7b2-8cf827a3be51",
+      "name": "Sticky Note48"
+    },
+    {
+      "parameters": {
+        "content": "## Comments Response On Messenger\n**Sending replies to Messenger, TikTok, Instagram** ",
+        "height": 448,
+        "width": 704
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        17264,
+        5504
+      ],
+      "typeVersion": 1,
+      "id": "1c1f8a1d-3034-4896-9083-b6c3c20945ea",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "Whatsapp Messages",
+        "height": 448,
+        "width": 1126
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        13904,
+        9088
+      ],
+      "typeVersion": 1,
+      "id": "d083e339-4f9f-4bb0-a0db-340d6fff97db",
+      "name": "Sticky Note49"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  (SELECT JSON_OBJECT('sender', phone_number_id, 'message', message)\n   FROM whatsapp_messages \n   WHERE phone_number_id = '{{ $json.metadata.phone_number_id }}'\n   LIMIT 1) AS replying_message,\n  \n  (SELECT JSON_OBJECT('display_name', display_name, 'profile_pic', profile_pic, 'gender', gender) \n   FROM crm_lead_social_profiles \n   WHERE platform = 'whatsapp' \n   AND platform_user_id = '{{ $json.metadata.phone_number_id }}' \n   LIMIT 1) AS profile;",
+        "options": {
+          "queryReplacement": ""
+        }
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14112,
+        9328
+      ],
+      "id": "f730a8b9-408e-48ec-bca0-30fc18f88b9a",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $input.first().json\n\nreturn [{json:{\n  profile:result.profile,\n  replying_message:result.replying_message,\n  sender_id:$items(\"Whatsapp Message Preparer\")[0].json.sender_id, access_token:\"IGAAQ6l6Gltb1BZAGEtUjA4ckV0M3ZAIVEhmeWR1UG1tdmxNVGxVU1Y4MmVFRjJZAOHdXb1ZAaQV8yQndTNzJNSlZA0RlNnWnpyT0NJY2FuRkFObnR1MWpkUThMRHFxbDVmRE9zQWUyajhINjQ5U2hmODVHcGJNUVphTWI5ZAFo4WENtawZDZD\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14240,
+        9328
+      ],
+      "id": "6f700069-1e0f-44b1-852c-e7a1992e5ba2",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.instagram.com/{{ $json.sender_id }}?fields=name,username,profile_pic,follower_count,is_verified_user,is_user_follow_business,is_business_follow_user",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "=IGAAQ6l6Gltb1BZAGEtUjA4ckV0M3ZAIVEhmeWR1UG1tdmxNVGxVU1Y4MmVFRjJZAOHdXb1ZAaQV8yQndTNzJNSlZA0RlNnWnpyT0NJY2FuRkFObnR1MWpkUThMRHFxbDVmRE9zQWUyajhINjQ5U2hmODVHcGJNUVphTWI5ZAFo4WENtawZDZD"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        13984,
+        9152
+      ],
+      "id": "2efb7bc7-9c32-4fea-9c22-754b3dc69bbd",
+      "name": "HTTP Request30"
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $items(\"HTTP Request30\")[0].json\nlet conversation_id = $input.first().json.data[0].id\n\nlet profile = {\n  \"display_name\":result.name,\n  \"profile_pic\":result.profile_pic,\n  \"gender\":result.gender,\n  \"locale\":result.locale,\n  \"timezone\":result.timezone,\n}\n\n\nreturn [{json:{\n  conversation_id,\n  profile\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14304,
+        9152
+      ],
+      "id": "396a9507-fe7a-409d-9f26-62209fb1d193",
+      "name": "Code in JavaScript46"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) VALUES (\"instagram\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\nset @lead_id = LAST_INSERT_ID();\n\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, display_name, profile_pic, locale) VALUES (@lead_id, \"instagram\", '{{ $('Message Preparer1').item.json.sender_id }}','{{ $json.profile.display_name }}','{{ $json.profile.profile_pic }}','{{ $json.profile.locale }}');\n\n\nINSERT INTO tiktok_conversations(tiktok_user_id, tiktok_conversation_id, lead_id, message_count, unread_count,last_message_time) VALUES ({{ $('Message Preparer1').item.json.sender_id }},'{{$json.conversation_id}}',@lead_id,1,0,CURRENT_TIMESTAMP);\n\nINSERT INTO tiktok_messages(sender_id,tiktok_message_id, conversation_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer1').item.json.sender_id }}','{{ $('Message Preparer1').item.json.instagram_id }}',LAST_INSERT_ID(),'user','{{ $('Message Preparer1').item.json.clean_text }}',{{ $('Message Preparer1').item.json.replying_to_id ? \"'\" + $('Message Preparer1').item.json.replying_to_id + \"'\" : 'NULL'  }},CURRENT_TIMESTAMP);\n\n\n\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14480,
+        9152
+      ],
+      "id": "0c7b463a-eb91-4b10-8250-6e2b5c3a20b0",
+      "name": "Execute a SQL query42",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1a78ee83-2df9-4b20-85e2-46e1b0c07d81",
+              "leftValue": "={{ $json.profile }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        14480,
+        9328
+      ],
+      "id": "94ff7f69-eafa-4eed-a5ab-86e29deae044",
+      "name": "Has Old Messages"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id into @conversation_id from tiktok_conversations where tiktok_user_id = '{{ $('Message Preparer1').item.json.sender_id }}' order by id desc limit 1;\n\nINSERT INTO tiktok_messages(sender_id,tiktok_message_id, conversation_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer1').item.json.sender_id }}','{{ $('Message Preparer1').item.json.instagram_id }}',LAST_INSERT_ID(),'user','{{ $('Message Preparer1').item.json.clean_text }}',{{ $('Message Preparer1').item.json.replying_to_id ? \"'\" + $('Message Preparer1').item.json.replying_to_id + \"'\" : 'NULL'  }},CURRENT_TIMESTAMP);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14688,
+        9328
+      ],
+      "id": "29474dab-3cdf-44cc-bc8f-9a4fbbcb42dd",
+      "name": "Execute a SQL query43",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "var data = $items(\"Whatsapp Message Preparer\")[0].json\nreturn [{json:{\n  sessionId:data.metadata.phone_number_id,\n  chatInput:data.messages[0].text.body,\n  page_id:data.metadata.phone_number_id,\n  source:\"whatsapp_messages\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14800,
+        9152
+      ],
+      "id": "4f53c698-04fb-4509-bc91-a54baa85df52",
+      "name": "To Router Preparer"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.instagram.com/v24.0/me/conversations?user_id={{ $('Whatsapp Message Preparer').item.json.sessionId }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "=IGAAQ6l6Gltb1BZAGEtUjA4ckV0M3ZAIVEhmeWR1UG1tdmxNVGxVU1Y4MmVFRjJZAOHdXb1ZAaQV8yQndTNzJNSlZA0RlNnWnpyT0NJY2FuRkFObnR1MWpkUThMRHFxbDVmRE9zQWUyajhINjQ5U2hmODVHcGJNUVphTWI5ZAFo4WENtawZDZD"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        14144,
+        9152
+      ],
+      "id": "710e4951-4ba3-44a8-9bb8-6ee5089debe6",
+      "name": "HTTP Request32"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items[0]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13952,
+        9328
+      ],
+      "id": "f589c5c9-8f10-4e89-a327-fd0f0c179a74",
+      "name": "Whatsapp Message Preparer"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v22.0/{{  $('Smart Router Input1').first().json.sessionId }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer EAATCouAp6Y0BQk9iIiB8ktF2lodDTZACU1NixL10N3DKIZCm21I2e5yZCLjeyDgpPmgO6r9o7huebKNpadqvHyG1kUJdoi7XxAy7O6uTc6YbxEQeYXUBZCfSTIrIZAAQyJK6NJ9vmQCjSnR5geKKsCtSewTPjLutpI2EjieBfSqxB5CMDH7JSqfHZBf6h63C6AXBvMhrEySPevI7Hw4MM8TOMPKItcvTpiFffQIxNzCLbocvnIOQlzwZBHhZAOMF6HMcLuArEzno1N3MpWbDfp4Y"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"messaging_product\": \"whatsapp\",\n    \"recipient_type\": \"individual\",\n    \"to\": \"249110330416\",\n    \"type\": \"text\",\n    \"text\": {\n        \"preview_url\": false,\n        \"body\": \"text-message-content\"\n    }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        16960,
+        6752
+      ],
+      "id": "26d83913-1dd1-4885-acb2-ab410c80ad6b",
+      "name": "HTTP Request33"
+    },
+    {
+      "parameters": {
+        "content": "## Whatsapp Response",
+        "height": 448,
+        "width": 704
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        16368,
+        6560
+      ],
+      "typeVersion": 1,
+      "id": "53cf3dcd-bed3-491c-8dcf-c1d92a828b80",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## Main AI Agent\n",
+        "height": 432,
+        "width": 576,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        14688,
+        5488
+      ],
+      "typeVersion": 1,
+      "id": "7f8175de-2651-4e85-b257-f3daca2709c2",
+      "name": "Sticky Note33"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-helper.afro-tech.net/social-media/chat/completions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "options": {},
+        "jsonBody": "{\"messages\":[{\"role\":\"user\",\"content\":\"={{ $('Smart Router Input1').first().json.query }}\"}]}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Message-Platform-Source",
+              "value": "={{ $('Smart Router Input1').first().json.source + ',' + $('Smart Router Input1').first().json.sessionId }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        15024,
+        5616
+      ],
+      "id": "2dc4e827-647b-42a0-a176-497d884e48d5",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "path": "a32b3eef-2963-4c30-8e13-bb49ff1f095b",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        12576,
+        9968
+      ],
+      "id": "5a91c112-428f-4459-9d01-593ac32ed9b5",
+      "name": "Get webhook6",
+      "webhookId": "a32b3eef-2963-4c30-8e13-bb49ff1f095b"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        12976,
+        9968
+      ],
+      "id": "f30f3bd0-fa45-4937-bbdd-f6945e300a43",
+      "name": "Challenge Response6"
+    },
+    {
+      "parameters": {
+        "content": "## Telegram WebHooks\n**Listent For Messages and Comments** ",
+        "height": 416,
+        "width": 1296,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        12352,
+        9712
+      ],
+      "typeVersion": 1,
+      "id": "bffc7560-ac1a-452b-ac31-6d3b9685e818",
+      "name": "Sticky Note51"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = items[0].json;\n    return [{ \n      json: { \n        event_type: \"telegram_message\", \n        source: \"telegram_message\", \n        messages: body.message.text,\n        chatInput: body.message.text,\n        sessionId: body.message.chat.id\n      } \n    }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12816,
+        9824
+      ],
+      "id": "55afdb46-0e60-4535-ba24-3d4b79304edc",
+      "name": "Prepare Data to Switch"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "telegram_message",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "dcf93495-180b-4a5d-a01c-77891beadfc2"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "26347a6b-17ba-4ccb-a5f5-f39b6c6313e7",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "comments",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4d82da8c-8a62-4677-9e02-789c7ef8543f",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_reaction",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "b7b3d80a-4d40-43dc-a393-2a7edb0c5b4b",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "53ddb804-7404-4eb8-ba6f-b225f442444c",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_edited",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "30f925db-53ee-4419-91b5-b7421f5dcae8",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_deleted",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        13200,
+        9760
+      ],
+      "id": "1de4ce06-e5d1-4dbd-8e41-dff6e82a8d08",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        12592,
+        9824
+      ],
+      "id": "8ef1e32a-2ed3-4611-94eb-6a9362258827",
+      "name": "Telegram Trigger",
+      "webhookId": "fa1f009f-78ec-4c77-ad7f-798c2222dfab",
+      "credentials": {
+        "telegramApi": {
+          "id": "F0m260ROPwm25Eo6",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "8583469332",
+        "text": "test",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        17392,
+        6864
+      ],
+      "id": "2853cc90-09a5-44d1-a012-f03825334807",
+      "name": "Send a text message",
+      "webhookId": "ce9234bd-b8cf-454c-8317-919bb26cbfe4",
+      "credentials": {
+        "telegramApi": {
+          "id": "F0m260ROPwm25Eo6",
+          "name": "Telegram account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Message Response\n**Sending replies to Messenger, TikTok, Instagram** ",
+        "height": 448,
+        "width": 704
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        17280,
+        6656
+      ],
+      "typeVersion": 1,
+      "id": "7738225c-16d5-4ef7-a7e9-5491316e79d1",
+      "name": "Sticky Note52"
+    },
+    {
+      "parameters": {
+        "jsCode": "data = $items(\"Telegram Trigger\")[0].json\nreturn {\n    update_id: data.update_id,\n    sessionId: data.update_id,\n    chatInput: data.message.text,\n    source: \"telegram_message\",\n    first_name:data.message.from.first_name,\n    last_name:data.message.from.last_name,\n    last_name:data.message.from.language_code,\n    sender_id:data.message.from.id,\n    chat_id:data.message.chat.id\n  };\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13920,
+        9744
+      ],
+      "id": "8bc34c9c-5476-4872-8278-bfec260d9b0c",
+      "name": "Message Preparer"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  (SELECT JSON_OBJECT('sender', sender_id, 'message_text', message_text) \n   FROM telegram_messages \n   WHERE telegram_message_id = '{{ $json.replying_to_id }}' \n   LIMIT 1) AS replying_message,\n  \n  (SELECT JSON_OBJECT('display_name', display_name, 'profile_pic', profile_pic, 'gender', gender) \n   FROM crm_lead_social_profiles \n   WHERE platform = 'telegram' \n   AND platform_user_id = '{{ $json.sender_id }}' \n   LIMIT 1) AS profile;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        13936,
+        9968
+      ],
+      "id": "5ddbcbed-773d-48ba-85a5-ffb6d0a26e3b",
+      "name": "Execute a SQL query44",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let result = $input.first().json\n\nreturn [{json:{\n  profile:result.profile,\n  replying_message:result.replying_message,\n  sender_id:$items(\"Message Preparer\")[0].json.sender_id\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14112,
+        9904
+      ],
+      "id": "5d6667b9-c46e-42f7-b7ae-d7c77a39915b",
+      "name": "Code in JavaScript48"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) VALUES (\"telegram\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\nset @lead_id = LAST_INSERT_ID();\n\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, display_name, locale) VALUES (@lead_id, \"telegram\", '{{ $('Message Preparer').item.json.sender_id }}','{{ $('Message Preparer').item.json.first_name+\" \"+$('Message Preparer').item.json.last_name }}','{{ $('Message Preparer').item.json.language_code }}');\n\n\nINSERT INTO telegram_conversations(telegram_user_id, telegram_chat_id, lead_id, message_count, unread_count,last_message_time) VALUES ({{ $('Message Preparer').item.json.sender_id }},'{{ $('Message Preparer').item.json.chat_id }}',@lead_id,1,0,CURRENT_TIMESTAMP);\n\nINSERT INTO telegram_messages(sender_id,telegram_message_id, chat_id, sender, message_text, reply_to_message_id, created_at,update_id) VALUES ('{{ $('Message Preparer').item.json.sender_id }}','{{ $('Message Preparer').item.json.sender_id }}',LAST_INSERT_ID(),'user','{{ $('Message Preparer').item.json.chatInput }}',{{ $('Message Preparer').item.json.replying_to_id ? \"'\" + $('Message Preparer').item.json.replying_to_id + \"'\" : 'NULL'  }},CURRENT_TIMESTAMP,{{ $('Message Preparer').item.json.update_id }});\n\n\n\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14320,
+        9936
+      ],
+      "id": "507593c1-f92d-4690-bfce-231727b16118",
+      "name": "Execute a SQL query45",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1a78ee83-2df9-4b20-85e2-46e1b0c07d81",
+              "leftValue": "={{ $json.profile }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        14144,
+        9760
+      ],
+      "id": "ca20abc1-92ca-4c79-aa34-566f51a775b8",
+      "name": "Has Old Messages12"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id into @chat_id from telegram_conversations where telegram_user_id = '{{ $('Message Preparer').item.json.sender_id }}' order by id desc limit 1;\n\nINSERT INTO telegram_messages(sender_id,telegram_message_id, chat_id, sender, message_text, reply_to_message_id,update_id ,created_at) VALUES ('{{ $('Message Preparer').item.json.sender_id }}','{{ $('Message Preparer').item.json.telegram_id }}',LAST_INSERT_ID(),'user','{{ $('Message Preparer').item.json.chatInput }}',{{ $('Message Preparer').item.json.replying_to_id ? \"'\" + $('Message Preparer').item.json.replying_to_id + \"'\" : 'NULL'  }},{{ $('Message Preparer').item.json.update_id }},CURRENT_TIMESTAMP);\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        14336,
+        9744
+      ],
+      "id": "ab4a1006-0879-42fd-9c9b-a6e6028cc01c",
+      "name": "Execute a SQL query46",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "var data = $items(\"Message Preparer\")[0].json\nreturn [{json:{\n  sessionId:data.sessionId,\n  chatInput:data.chatInput,\n  source:\"telegram_messages\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14544,
+        9856
+      ],
+      "id": "5034ee0d-2512-4849-b831-5138b25aad8d",
+      "name": "To Router Preparer12"
+    },
+    {
+      "parameters": {
+        "content": "## X WebHooks\n**Listent For Messages and Comments** ",
+        "height": 416,
+        "width": 1296,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        12416,
+        10288
+      ],
+      "typeVersion": 1,
+      "id": "a6df1219-21b2-4d56-8151-ebc9ae25b798",
+      "name": "Sticky Note53"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = items[0].json;\n    return [{ \n      json: { \n        event_type: \"telegram_message\", \n        source: \"telegram_message\", \n        messages: body.message.text,\n        chatInput: body.message.text,\n        sessionId: body.message.chat.id\n      } \n    }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12848,
+        10400
+      ],
+      "id": "0a0cbde3-5983-4cda-a60a-828a5cebfdbe",
+      "name": "Prepare Data to Switch1"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "telegram_message",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "dcf93495-180b-4a5d-a01c-77891beadfc2"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "26347a6b-17ba-4ccb-a5f5-f39b6c6313e7",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "comments",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4d82da8c-8a62-4677-9e02-789c7ef8543f",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_reaction",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "b7b3d80a-4d40-43dc-a393-2a7edb0c5b4b",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "53ddb804-7404-4eb8-ba6f-b225f442444c",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_edited",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "30f925db-53ee-4419-91b5-b7421f5dcae8",
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "post_deleted",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        13232,
+        10336
+      ],
+      "id": "e93e9271-9d1c-4fe1-9f60-b85aec42603c",
+      "name": "Switch1"
+    },
+    {
+      "parameters": {
+        "path": "56bae59f-790d-4a49-b877-bfc45d3d86e8",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        12560,
+        10544
+      ],
+      "id": "198314e2-6941-4697-997f-221cb46df4c4",
+      "name": "Get webhook7",
+      "webhookId": "56bae59f-790d-4a49-b877-bfc45d3d86e8"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\n// 1. Extract the token from the https://n8n.afro-tech.net/webhook-test/xrequest\nconst crc_token = $input.first().json.query.crc_token;\n\n// 2. Your API Key Secret (Consumer Secret)\nconst CONSUMER_SECRET = 'DDdVHSun11y9t3KTYc79ZixzbV6auuNVpgQB9HorW9rjUKifVe';\n\n// access token\n// AAAAAAAAAAAAAAAAAAAAAEVj7QEAAAAAK7smDPQu03MV7ybVGV%2BM4HKy7nU%3DB9VdGySGheUaf0mm8iCP5UJuqLCwvNbfbFwdC3mZw5YjImM2Kc\n// sk\n// vC8KdBLa3xD037ExjCZDdnY4lklL5EDq1iUHzm0KouJFR2TKgc\n\n// ss\n// 7LaVfnN7COvq4NevfYAoHjt3O\n\n// 3. Generate the hash\nconst hmac = crypto.createHmac('SHA256', CONSUMER_SECRET)\n                   .update(crc_token)\n                   .digest('base64');\n\n// 4. Return ONLY the required object\nreturn {\n    response_token: `sha256=${hmac}`\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12544,
+        10432
+      ],
+      "id": "525dc603-5596-4cf6-8e7e-8ef12fe67328",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\n// 1. YOUR CREDENTIALS (PASTED FROM YOUR REQUEST)\nconst consumerKey = 'vC8KdBLa3xD037ExjCZDdnY4lklL5EDq1iUHzm0KouJFR2TKgc'; // API Key\nconst consumerSecret = 'DDdVHSun11y9t3KTYc79ZixzbV6auuNVpgQB9HorW9rjUKifVe'; // API Key Secret\nconst accessToken = 'AAAAAAAAAAAAAAAAAAAAAEVj7QEAAAAAK7smDPQu03MV7ybVGV%2BM4HKy7nU%3DB9VdGySGheUaf0mm8iCP5UJuqLCwvNbfbFwdC3mZw5YjImM2Kc';\nconst tokenSecret = '7LaVfnN7COvq4NevfYAoHjt3O'; // Access Token Secret\n\n// 2. TWEET CONTENT\nconst tweetText = \"Hello from my n8n workflow! 🚀\";\n\n// 3. OAUTH PARAMETERS\nconst method = 'POST';\nconst url = 'https://api.twitter.com/2/tweets';\nconst nonce = crypto.randomBytes(16).toString('hex');\nconst timestamp = Math.floor(Date.now() / 1000).toString();\n\nconst oauthParams = {\n    oauth_consumer_key: consumerKey,\n    oauth_nonce: nonce,\n    oauth_signature_method: 'HMAC-SHA1',\n    oauth_timestamp: timestamp,\n    oauth_token: accessToken,\n    oauth_version: '1.0'\n};\n\n// 4. GENERATE SIGNATURE\nconst parameterString = Object.keys(oauthParams).sort().map(key => \n    `${encodeURIComponent(key)}=${encodeURIComponent(oauthParams[key])}`\n).join('&');\n\nconst signatureBaseString = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(parameterString)}`;\nconst signingKey = `${encodeURIComponent(consumerSecret)}&${encodeURIComponent(tokenSecret)}`;\n\nconst signature = crypto.createHmac('sha1', signingKey)\n    .update(signatureBaseString)\n    .digest('base64');\n\noauthParams.oauth_signature = signature;\n\n// 5. BUILD AUTHORIZATION HEADER\nconst authHeader = 'OAuth ' + Object.keys(oauthParams).sort().map(key => \n    `${encodeURIComponent(key)}=\"${encodeURIComponent(oauthParams[key])}\"`\n).join(', ');\n\n// 6. OUTPUT DATA FOR HTTP REQUEST NODE\nreturn {\n    headers: {\n        'Authorization': authHeader,\n        'Content-Type': 'application/json'\n    },\n    body: {\n        text: tweetText\n    }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12960,
+        10528
+      ],
+      "id": "4a24c294-7b9f-4306-920a-9617271cc76b",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "jsCode": "var data = $items(\"Message Preparer6\")[0].json\nreturn [{json:{\n  sessionId:data.sessionId,\n  chatInput:data.chatInput,\n  page_id:data.page_id,\n  source:\"facebook_comments\"\n}}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12800,
+        6080
+      ],
+      "id": "8f36dee1-99eb-40d7-bd3d-569c45101994",
+      "name": "To Router Preparer13"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-helper.afro-tech.net/api/process-message",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"platform_user_id\": \"{{ $('Smart Router Input1').first().json.sessionId }}\",\n  \"text\": \"{{ $('Smart Router Input1').first().json.chatInput }}\",\n  \"ai_reply\": \"{{ $('HTTP Request1').first().json.toString() }}\",\n  \"router_value\": \"{{ $('Smart Router Input1').first().json.router_value }}\",\n  \"source\": \"{{ $('Smart Router Input1').first().json.source }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        18400,
+        5680
+      ],
+      "id": "crm-process-message-node-001",
+      "name": "CRM Process Message"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Prepare Data to Switch4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request16": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query25",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "CRM Process Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Preparer6": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query22",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data to Switch4": {
+      "main": [
+        [
+          {
+            "node": "Switch7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch7": {
+      "main": [
+        [
+          {
+            "node": "Message Preparer6",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comment Preparer1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [],
+        [],
+        [],
+        [
+          {
+            "node": "HTTP Request31",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript32": {
+      "main": [
+        [
+          {
+            "node": "Smart Router Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query22": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript33",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript33": {
+      "main": [
+        [
+          {
+            "node": "Has Old Messages6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request17": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request19",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript34": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query23",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query23": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer13",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request19": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript34",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Old Messages6": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query24",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request17",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query24": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer13",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To Router Preparer6": {
+      "main": [
+        [
+          {
+            "node": "Smart Router Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Smart Router Input1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript35",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript35": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch8": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript25",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request16",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request26",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply To Facebook Comments Qurey",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request33",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Switch8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data to Switch5": {
+      "main": [
+        [
+          {
+            "node": "Switch9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch9": {
+      "main": [
+        [
+          {
+            "node": "Message Preparer7",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message Preparer8",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [],
+        [],
+        [],
+        [
+          {
+            "node": "Message Preparer9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get webhook3": {
+      "main": [
+        [
+          {
+            "node": "Challenge Response3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post webhook3": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data to Switch5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Preparer7": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query26",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query26": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript36",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript36": {
+      "main": [
+        [
+          {
+            "node": "Has Old Messages7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request20": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request21",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript37": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query27",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query27": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request21": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript37",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Old Messages7": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query28",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request20",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query28": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To Router Preparer7": {
+      "main": [
+        [
+          {
+            "node": "Smart Router Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Preparer8": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query29",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query29": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript38",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript38": {
+      "main": [
+        [
+          {
+            "node": "Has Old Messages8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request22": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request23",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript39": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query30",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query30": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request23": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript39",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Old Messages8": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query31",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request22",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query31": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To Router Preparer8": {
+      "main": [
+        [
+          {
+            "node": "Smart Router Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get webhook4": {
+      "main": [
+        [
+          {
+            "node": "Challenge Response4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data to Switch6": {
+      "main": [
+        [
+          {
+            "node": "Switch10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post webhook4": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data to Switch6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Preparer9": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query32",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query32": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript40",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript40": {
+      "main": [
+        [
+          {
+            "node": "Has Old Messages9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request24": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request25",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript41": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query33",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query33": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request25": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript41",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Old Messages9": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query34",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request24",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query34": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request26": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query35",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get webhook5": {
+      "main": [
+        [
+          {
+            "node": "Challenge Response5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data to Switch7": {
+      "main": [
+        [
+          {
+            "node": "Switch11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch11": {
+      "main": [
+        [
+          {
+            "node": "Message Preparer10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post webhook5": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data to Switch7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Preparer10": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query36",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query36": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript42",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript42": {
+      "main": [
+        [
+          {
+            "node": "Has Old Messages10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request27": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request28",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript43": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query37",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query37": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request28": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript43",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Old Messages10": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query38",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request27",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query38": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To Router Preparer10": {
+      "main": [
+        [
+          {
+            "node": "Smart Router Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Preparer11": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query39",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript44": {
+      "main": [
+        [
+          {
+            "node": "Has Old Messages11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request29": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript45",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript45": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query40",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query40": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Old Messages11": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query41",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request29",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query41": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To Router Preparer11": {
+      "main": [
+        [
+          {
+            "node": "Smart Router Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "insert comments to facebook_post_comments1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript44",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment Preparer1": {
+      "main": [
+        [
+          {
+            "node": "insert comments to facebook_post_comments1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STT Webhook1": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get webhook": {
+      "main": [
+        [
+          {
+            "node": "Challenge Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply To Facebook Comments Qurey": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request30": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request32",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript46": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query42",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query42": {
+      "main": [
+        []
+      ]
+    },
+    "Has Old Messages": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query43",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request30",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query43": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch10": {
+      "main": [
+        [
+          {
+            "node": "Whatsapp Message Preparer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request32": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript46",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whatsapp Message Preparer": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To Router Preparer": {
+      "main": [
+        [
+          {
+            "node": "Smart Router Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get webhook6": {
+      "main": [
+        [
+          {
+            "node": "Challenge Response6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data to Switch": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data to Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Message Preparer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Preparer": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query44",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query44": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript48",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript48": {
+      "main": [
+        [
+          {
+            "node": "Has Old Messages12",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query45": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer12",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Old Messages12": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query46",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute a SQL query45",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query46": {
+      "main": [
+        [
+          {
+            "node": "To Router Preparer12",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To Router Preparer12": {
+      "main": [
+        [
+          {
+            "node": "Smart Router Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data to Switch1": {
+      "main": [
+        [
+          {
+            "node": "Switch1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get webhook7": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To Router Preparer13": {
+      "main": [
+        [
+          {
+            "node": "Smart Router Input1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "2f461999-8b42-4963-8340-d847df330a65",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "bcf6f7d16a28a7df9a238c69d5179feeddf3dc51ff62cdb52f4f559790eb2b7c"
+  },
+  "id": "n9uYPLEGWDYbXlVO",
+  "tags": []
+}

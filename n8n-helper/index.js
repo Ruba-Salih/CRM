@@ -42,7 +42,6 @@ io.on("connection", (socket) => {
   });
 });
 
-
 // Routes
 // CRM Routes
 app.use('/api', crmRoutes);
