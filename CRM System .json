@@ -3,31 +3,70 @@
   "nodes": [
     {
       "parameters": {
+        "operation": "executeQuery",
+        "query": "SET @conversation_id = NULL;\nSET @fb_conv_id = NULL;\nSET @lead_id = NULL;\nSET @fallback_lead_id = NULL;\n\nSELECT c.id, c.facebook_conversation_id, c.lead_id INTO @conversation_id, @fb_conv_id, @lead_id\nFROM facebook_conversations c\nJOIN crm_lead_social_profiles p ON p.crm_lead_id = c.lead_id\nWHERE p.platform = 'facebook' AND p.platform_user_id = '{{ $('Message Preparer6').first().json.sessionId }}'\nORDER BY c.id DESC LIMIT 1;\n\nSELECT crm_lead_id INTO @fallback_lead_id FROM crm_lead_social_profiles WHERE platform='facebook' AND platform_user_id='{{ $('Message Preparer6').first().json.sessionId }}' LIMIT 1;\n\nINSERT IGNORE INTO facebook_conversations(facebook_conversation_id, lead_id, message_count, last_message_time) \nSELECT COALESCE(NULLIF(NULLIF('{{ $json.conversation_id }}', 'undefined'), ''), CONCAT('fb_temp_', REPLACE(UUID(),'-',''))), @fallback_lead_id, 1, NOW()\nWHERE @conversation_id IS NULL AND @fallback_lead_id IS NOT NULL;\n\nSELECT c.id, c.facebook_conversation_id, c.lead_id INTO @conversation_id, @fb_conv_id, @lead_id\nFROM facebook_conversations c\nJOIN crm_lead_social_profiles p ON p.crm_lead_id = c.lead_id\nWHERE p.platform = 'facebook' AND p.platform_user_id = '{{ $('Message Preparer6').first().json.sessionId }}'\nORDER BY c.id DESC LIMIT 1;\n\nINSERT INTO facebook_messages(facebook_message_id, facebook_conversation_id, conversation_id, lead_id, sender, message_text, reply_to_message_id, created_time)\nVALUES ('{{ $json.message_id }}', @fb_conv_id, @conversation_id, @lead_id, 'agent', '{{ $('HTTP Request1').first().json.toString() }}', NULL, NOW());",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        23264,
+        28000
+      ],
+      "id": "bc4fe526-329f-45a2-9981-cdd768d9da89",
+      "name": "Execute a SQL query25",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-helper.afro-tech.net/api/process-message",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"platform_user_id\": \"{{ $('Smart Router Input1').first().json.sessionId }}\",\n  \"text\": \"{{ $('Smart Router Input1').first().json.chatInput }}\",\n  \"ai_reply\": \"{{ $('HTTP Request1').first().json.toString() }}\",\n  \"router_value\": \"{{ $('Smart Router Input1').first().json.router_value }}\",\n  \"source\": \"{{ $('Smart Router Input1').first().json.source }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        23584,
+        28000
+      ],
+      "id": "0e1ad433-74a5-4d8c-bbb8-86f3923f9a5c",
+      "name": "CRM Process Message"
+    },
+    {
+      "parameters": {
         "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n\n  return {text:$items(\"Smart Router Input1\")[0].json.output}\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        17424,
-        5680
+        24256,
+        34256
       ],
-      "id": "3379d5ac-9c05-4961-a9a9-ef4ef80a2647",
+      "id": "5a7bc20e-1747-4d1c-b34b-9213dac1aafd",
       "name": "Code in JavaScript25",
       "alwaysOutputData": true
     },
     {
       "parameters": {
         "multipleMethods": true,
-        "path": "65ed68f2-ee4f-4624-9785-767253b8976f",
+        "path": "messenger",
         "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        12528,
-        6720
+        19360,
+        35296
       ],
-      "id": "b9132dcf-dbc4-4cef-b31a-398280710989",
+      "id": "269c6781-55ee-4bfa-aeb2-826a643da119",
       "name": "Webhook1",
       "webhookId": "65ed68f2-ee4f-4624-9785-767253b8976f"
     },
@@ -52,10 +91,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        17808,
-        5680
+        24640,
+        34256
       ],
-      "id": "0a825dc0-35b6-4522-a869-2253c4ac28a9",
+      "id": "7cf81f10-0b35-4eae-a400-3e75fddf7778",
       "name": "HTTP Request16"
     },
     {
@@ -67,11 +106,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        12320,
-        6624
+        19152,
+        35200
       ],
       "typeVersion": 1,
-      "id": "4130ab18-c4ea-43ff-b362-7dbb9d35bdce",
+      "id": "7c40d775-b9d9-42a0-8be3-49caf55b0dfa",
       "name": "Sticky Note26"
     },
     {
@@ -82,11 +121,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        13552,
-        5536
+        20384,
+        34112
       ],
       "typeVersion": 1,
-      "id": "64e4715e-f2e5-40b1-822e-bcfa8ca4942e",
+      "id": "d304819e-3297-4136-9e0d-78356ba1b239",
       "name": "Sticky Note27"
     },
     {
@@ -97,11 +136,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        16528,
-        5456
+        23360,
+        34032
       ],
       "typeVersion": 1,
-      "id": "8ce3eaf8-ecae-4dca-a297-a7b9c57f288f",
+      "id": "bb7542f5-2041-44e2-a121-ccd0f18d53f5",
       "name": "Sticky Note31"
     },
     {
@@ -111,10 +150,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        11616,
-        6352
+        18448,
+        34928
       ],
-      "id": "5da4dd98-0b66-4087-b07a-0bc1baba8e8e",
+      "id": "c7b20e23-90ab-430f-a249-f2c4252c68b3",
       "name": "Message Preparer6"
     },
     {
@@ -124,10 +163,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12736,
-        6736
+        19568,
+        35312
       ],
-      "id": "0005d274-6e46-4ade-b0db-26c23b563b5b",
+      "id": "be8574c4-f339-4355-b9bb-a39a8570c5b5",
       "name": "Prepare Data to Switch4"
     },
     {
@@ -301,10 +340,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        12912,
-        6672
+        19744,
+        35248
       ],
-      "id": "ed43e1c1-594b-405d-a9e8-4f65366ec2f4",
+      "id": "f4426e85-70be-4020-9cb5-c71170875056",
       "name": "Switch7"
     },
     {
@@ -314,10 +353,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        13056,
-        5632
+        19888,
+        34208
       ],
-      "id": "351dd41e-2607-41f8-8779-752e8898f1ef",
+      "id": "97f3154a-0a26-46a3-8aae-e22b2a484011",
       "name": "Code in JavaScript32"
     },
     {
@@ -328,11 +367,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        12896,
-        5552
+        19728,
+        34128
       ],
       "typeVersion": 1,
-      "id": "51f98778-8761-416b-937d-b2cb191c1163",
+      "id": "9e00a2c9-c776-463e-8c46-79f3969f6caf",
       "name": "Sticky Note37"
     },
     {
@@ -343,11 +382,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        11552,
-        6128
+        18384,
+        34704
       ],
       "typeVersion": 1,
-      "id": "7ed2cfd1-7fc2-48d1-b7a1-9a1675e46413",
+      "id": "e131c9ad-c7f7-4547-9903-ece44e02ed98",
       "name": "Sticky Note38"
     },
     {
@@ -359,10 +398,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        11824,
-        6352
+        18656,
+        34928
       ],
-      "id": "db66c15e-fd60-4e87-873c-6bbf2523f0e8",
+      "id": "b9e242d8-3a21-4b8f-86d0-a89c91baaf2f",
       "name": "Execute a SQL query22",
       "credentials": {
         "mySql": {
@@ -378,10 +417,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12000,
-        6352
+        18832,
+        34928
       ],
-      "id": "56725d4d-cdfc-453b-b3d3-e22e078d6680",
+      "id": "82cad217-d863-40e9-981f-a9f939411aed",
       "name": "Code in JavaScript33"
     },
     {
@@ -401,10 +440,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        11696,
-        6176
+        18528,
+        34752
       ],
-      "id": "0e8a7a09-2971-4e1c-acce-6aaf7af5dd22",
+      "id": "60f119e2-4ff6-4cfc-953c-f31707cefe93",
       "name": "HTTP Request17"
     },
     {
@@ -414,25 +453,25 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12016,
-        6176
+        18848,
+        34752
       ],
-      "id": "57cbbecb-a37a-46a7-a6ac-9b47ab1ae432",
+      "id": "9d6183f1-5adc-438d-bd3b-10bbb910f413",
       "name": "Code in JavaScript34"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) VALUES (\"facebook\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\nset @lead_id = LAST_INSERT_ID();\n\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, gender, display_name, profile_pic, locale) VALUES (@lead_id, \"facebook\", '{{ $('Message Preparer6').item.json.sessionId }}','{{ $json.profile.gender }}','{{ $json.profile.display_name }}','{{ $json.profile.profile_pic }}','{{ $json.profile.locale }}');\n\nINSERT INTO facebook_conversations(facebook_conversation_id, lead_id, message_count, last_message_time) VALUES (COALESCE(NULLIF(NULLIF('{{ $json.conversation_id }}', 'undefined'), ''), CONCAT('fb_', REPLACE(UUID(),'-',''))),@lead_id,1,'{{ new Date($('Message Preparer6').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');\n\nset @conversation_id = LAST_INSERT_ID();\n\nINSERT INTO facebook_messages(facebook_message_id, facebook_conversation_id, conversation_id, lead_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer6').item.json.message_id }}', COALESCE(NULLIF(NULLIF('{{ $json.conversation_id }}', 'undefined'), ''), CONCAT('fb_', REPLACE(UUID(),'-',''))), @conversation_id, @lead_id, 'user', '{{ $('Message Preparer6').item.json.chatInput }}', {{ $('Message Preparer6').item.json.replying_to_id ? \"'\" + $('Message Preparer6').item.json.replying_to_id + \"'\" : 'NULL'  }}, '{{ new Date($('Message Preparer6').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');",
+        "query": "INSERT INTO crm_leads(source_platform, first_interaction_type, first_interaction_time, last_interaction_time, lead_score, status) VALUES (\"facebook\",\"message\",CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,5,'new');\n\nset @lead_id = LAST_INSERT_ID();\n\nINSERT INTO crm_lead_social_profiles(crm_lead_id, platform, platform_user_id, gender, display_name, profile_pic, locale) VALUES (@lead_id, \"facebook\", '{{ $('Message Preparer6').item.json.sessionId }}','{{ $json.profile.gender }}','{{ $json.profile.display_name }}','{{ $json.profile.profile_pic }}','{{ $json.profile.locale }}');\n\nINSERT INTO facebook_conversations(facebook_conversation_id, lead_id, message_count, last_message_time) VALUES ('{{ $json.conversation_id }}',@lead_id,1,'{{ new Date($('Message Preparer6').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');\n\nset @conversation_id = LAST_INSERT_ID();\n\nINSERT INTO facebook_messages(facebook_message_id, facebook_conversation_id, conversation_id, lead_id, sender, message_text, reply_to_message_id, created_time) VALUES ('{{ $('Message Preparer6').item.json.message_id }}', '{{ $json.conversation_id }}', @conversation_id, @lead_id, 'user', '{{ $('Message Preparer6').item.json.chatInput }}', {{ $('Message Preparer6').item.json.replying_to_id ? \"'\" + $('Message Preparer6').item.json.replying_to_id + \"'\" : 'NULL'  }}, '{{ new Date($('Message Preparer6').item.json.created_time).toISOString().slice(0, 19).replace('T', ' ') }}');",
         "options": {}
       },
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        12192,
-        6176
+        19024,
+        34752
       ],
-      "id": "fc24e6fa-5495-484f-a4cd-c4d35949da5f",
+      "id": "68c6310f-2546-453b-895d-e3f2273d7583",
       "name": "Execute a SQL query23",
       "credentials": {
         "mySql": {
@@ -457,10 +496,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        12432,
-        7104
+        19264,
+        35680
       ],
-      "id": "e458d895-4888-40b1-a347-3ae31e724306",
+      "id": "c2645215-a36f-4062-a3f7-91b48334abf8",
       "name": "HTTP Request18"
     },
     {
@@ -480,10 +519,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        11856,
-        6176
+        18688,
+        34752
       ],
-      "id": "aa512ac9-95b4-4c5d-a88b-2d9d7ffc8806",
+      "id": "f749993c-efd3-48bd-8e17-3881bc0f8458",
       "name": "HTTP Request19"
     },
     {
@@ -514,10 +553,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        12176,
-        6352
+        19008,
+        34928
       ],
-      "id": "9241d7a1-38b6-4d13-b5bc-91a81240c1d0",
+      "id": "57838a29-e9fc-4951-8ce2-c6f05166ae34",
       "name": "Has Old Messages6"
     },
     {
@@ -529,10 +568,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        12368,
-        6336
+        19200,
+        34912
       ],
-      "id": "e09c1c29-7efc-46a6-879c-290b91c21467",
+      "id": "4b3d80d6-faae-4b15-bba6-6ea8d3609760",
       "name": "Execute a SQL query24",
       "credentials": {
         "mySql": {
@@ -548,10 +587,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        13376,
-        6144
+        20208,
+        34720
       ],
-      "id": "dbbdc076-5f15-4682-8ac3-9eb324f62d50",
+      "id": "233af942-2e01-41d7-bc27-3be935807f45",
       "name": "To Router Preparer6"
     },
     {
@@ -561,10 +600,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        13664,
-        5632
+        20496,
+        34208
       ],
-      "id": "eafe03dd-ae8e-4bc2-89f5-237909d8fdac",
+      "id": "85e645b3-6fb4-4210-8c64-a8230f4e7009",
       "name": "Smart Router Input1"
     },
     {
@@ -574,10 +613,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14800,
-        5616
+        21632,
+        34192
       ],
-      "id": "0d579a20-f3f6-4d06-b238-94bc294fe926",
+      "id": "cb7c4be7-3dd1-4f36-881c-fc38ad1e4652",
       "name": "Code in JavaScript35"
     },
     {
@@ -727,32 +766,11 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        17056,
-        5536
+        23888,
+        34112
       ],
-      "id": "4de3d006-a004-47a8-bdeb-244ba199bb07",
+      "id": "0e304665-1706-441f-9584-4a1a42a2f382",
       "name": "Switch8"
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT c.id, c.facebook_conversation_id, c.lead_id INTO @conversation_id, @fb_conv_id, @lead_id\nFROM facebook_conversations c\nJOIN crm_lead_social_profiles p ON p.crm_lead_id = c.lead_id\nWHERE p.platform = 'facebook' AND p.platform_user_id = '{{ $('Message Preparer6').first().json.sessionId }}'\nORDER BY c.id DESC LIMIT 1;\n\nINSERT INTO facebook_messages(facebook_message_id, facebook_conversation_id, conversation_id, lead_id, sender, message_text, reply_to_message_id, created_time)\nVALUES ('{{ $json.message_id }}', @fb_conv_id, @conversation_id, @lead_id, 'agent', '{{ $('HTTP Request1').first().json.toString() }}', NULL, NOW());",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.mySql",
-      "typeVersion": 2.5,
-      "position": [
-        18080,
-        5680
-      ],
-      "id": "769d5679-c458-45b8-959f-eacf465a63f0",
-      "name": "Execute a SQL query25",
-      "credentials": {
-        "mySql": {
-          "id": "mV8XlX23k3eXomiW",
-          "name": "MySQL account"
-        }
-      }
     },
     {
       "parameters": {
@@ -769,7 +787,7 @@
               "leftValue": "={{ $('HTTP Request1').first().json }}",
               "rightValue": "",
               "operator": {
-                "type": "string",
+                "type": "object",
                 "operation": "notEmpty",
                 "singleValue": true
               }
@@ -782,10 +800,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        16800,
-        5584
+        23632,
+        34160
       ],
-      "id": "41ec47c5-edde-4df9-a0ba-4a8f940057c7",
+      "id": "18d029b5-67e8-4300-990b-ab5a3ba4f8d2",
       "name": "If3"
     },
     {
@@ -797,11 +815,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        12368,
-        7264
+        19200,
+        35840
       ],
       "typeVersion": 1,
-      "id": "4b341cc8-3d7f-42ac-85a2-b57a6ef29b12",
+      "id": "e3d52d43-5c65-402d-b6df-8888e28ae689",
       "name": "Sticky Note39"
     },
     {
@@ -811,10 +829,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12816,
-        7376
+        19648,
+        35952
       ],
-      "id": "6ed2250c-e427-44f5-8f29-cf699b9ebfc8",
+      "id": "7a828a39-307b-4241-ad87-9a6f6863666b",
       "name": "Prepare Data to Switch5"
     },
     {
@@ -988,10 +1006,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        13360,
-        7360
+        20192,
+        35936
       ],
-      "id": "9b8c7190-5a82-439d-bb9e-ba6e76a8aaaa",
+      "id": "2ad13037-afb9-42ab-bc37-2c629fb796be",
       "name": "Switch9"
     },
     {
@@ -1003,10 +1021,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        12384,
-        7552
+        19216,
+        36128
       ],
-      "id": "d07e15b5-970d-410a-8b25-545cba1fa23a",
+      "id": "1d62dffd-9ce3-4619-9035-bddf1cde0d31",
       "name": "Get webhook3",
       "webhookId": "96df6e04-bd68-4737-b0ee-c20af39c65c3"
     },
@@ -1019,10 +1037,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        12672,
-        7552
+        19504,
+        36128
       ],
-      "id": "3d9cf75c-3f15-4b14-8c66-3d5fb44ef1ba",
+      "id": "8c11d03b-2c10-40d8-ad35-ce997acab11e",
       "name": "Challenge Response3"
     },
     {
@@ -1034,10 +1052,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        12496,
-        7376
+        19328,
+        35952
       ],
-      "id": "7c3e1e2c-daf4-4ee3-84e2-d760b789e469",
+      "id": "785a3f31-dbd1-49e8-a452-554caf1d6674",
       "name": "Post webhook3",
       "webhookId": "71e9fedf-59ca-4256-92b9-2f999c6bae57"
     },
@@ -1048,10 +1066,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        13744,
-        6320
+        20576,
+        34896
       ],
-      "id": "4eb62663-4987-40c5-9b4d-fa1d990ffc45",
+      "id": "dbfad8e4-51ca-4ac4-b491-a982a1f4f3f3",
       "name": "Message Preparer7"
     },
     {
@@ -1062,11 +1080,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        13712,
-        6032
+        20544,
+        34608
       ],
       "typeVersion": 1,
-      "id": "98e1d9a0-c8a8-4b52-9d3a-2943b9877103",
+      "id": "5024af19-d731-40fa-9338-5e4636ca2395",
       "name": "Sticky Note40"
     },
     {
@@ -1078,10 +1096,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        13904,
-        6320
+        20736,
+        34896
       ],
-      "id": "5a948550-bd42-46ef-8e06-30fed70d8179",
+      "id": "96763b5d-568a-4386-9b91-d5f5396ca7c2",
       "name": "Execute a SQL query26",
       "credentials": {
         "mySql": {
@@ -1097,10 +1115,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14080,
-        6320
+        20912,
+        34896
       ],
-      "id": "170e3da6-6954-4aac-8ab8-b630cda223e0",
+      "id": "69019225-66df-461a-9dc1-0fade13a615a",
       "name": "Code in JavaScript36"
     },
     {
@@ -1120,10 +1138,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        13776,
-        6144
+        20608,
+        34720
       ],
-      "id": "d5e1fabe-6c4d-4820-961f-7c7be855f7ab",
+      "id": "00254367-3d7c-4274-897d-fa46820711f0",
       "name": "HTTP Request20"
     },
     {
@@ -1133,10 +1151,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14096,
-        6144
+        20928,
+        34720
       ],
-      "id": "eb0355c6-985d-47d2-af6f-8fa6fa43ae72",
+      "id": "19b97aa0-d43f-4284-b05b-98aec9f19a85",
       "name": "Code in JavaScript37"
     },
     {
@@ -1148,10 +1166,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14272,
-        6144
+        21104,
+        34720
       ],
-      "id": "4f4ad1c1-b110-4602-b5d5-732552184f65",
+      "id": "f4bb9bd1-6a41-43a3-a891-c8cb20e14ca1",
       "name": "Execute a SQL query27",
       "credentials": {
         "mySql": {
@@ -1177,10 +1195,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        13936,
-        6144
+        20768,
+        34720
       ],
-      "id": "5fb0f890-a033-496d-b594-ce6bba4db9da",
+      "id": "0b6a799e-f7d8-45a6-83e2-a17c8e19b6d6",
       "name": "HTTP Request21"
     },
     {
@@ -1211,10 +1229,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        14256,
-        6320
+        21088,
+        34896
       ],
-      "id": "48cc8029-3585-44eb-a1c6-cd51283520a1",
+      "id": "651147d9-0bed-46ca-83fe-0390991d89ab",
       "name": "Has Old Messages7"
     },
     {
@@ -1226,10 +1244,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14448,
-        6304
+        21280,
+        34880
       ],
-      "id": "38b778b7-d4a7-4ad8-be06-ca04506139af",
+      "id": "b5f21f72-c6dc-4014-a8c4-4bcfdca2bdaf",
       "name": "Execute a SQL query28",
       "credentials": {
         "mySql": {
@@ -1245,10 +1263,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14592,
-        6144
+        21424,
+        34720
       ],
-      "id": "b1b64711-cded-465f-9346-4f41ca0e832a",
+      "id": "85472e64-a95d-4006-98d1-29ae1a26f09e",
       "name": "To Router Preparer7"
     },
     {
@@ -1258,10 +1276,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        13776,
-        6832
+        20608,
+        35408
       ],
-      "id": "7ec19992-18de-42a2-bea6-8e49f2241198",
+      "id": "3c7369aa-39a3-4521-ab8d-3d6089f8af1f",
       "name": "Message Preparer8"
     },
     {
@@ -1272,11 +1290,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        13728,
-        6592
+        20560,
+        35168
       ],
       "typeVersion": 1,
-      "id": "483dd91c-1230-442a-87d9-18e4b76ceb75",
+      "id": "04c2d6e9-9eb3-47c0-8b8b-45d60f5ae356",
       "name": "Sticky Note41"
     },
     {
@@ -1288,10 +1306,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        13936,
-        6832
+        20768,
+        35408
       ],
-      "id": "12abe83f-36d2-4039-a294-373523001d44",
+      "id": "85c6b98c-8a6d-47ed-bc10-b5dcee423159",
       "name": "Execute a SQL query29",
       "credentials": {
         "mySql": {
@@ -1307,10 +1325,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14112,
-        6832
+        20944,
+        35408
       ],
-      "id": "97658a99-45c3-4f0d-b9c8-5fa153ed2f63",
+      "id": "bbc6f698-dcfe-4501-b3da-256905b734bf",
       "name": "Code in JavaScript38"
     },
     {
@@ -1330,10 +1348,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        13808,
-        6656
+        20640,
+        35232
       ],
-      "id": "d442073f-d39b-4bc1-bd10-5cb140782833",
+      "id": "ae5e096a-c230-461a-971c-358e1e72221e",
       "name": "HTTP Request22"
     },
     {
@@ -1343,10 +1361,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14128,
-        6656
+        20960,
+        35232
       ],
-      "id": "024c8bd1-8597-4edf-bb6e-d82e7053dd10",
+      "id": "819eec54-f929-4f76-a8c1-fd2d17bb842d",
       "name": "Code in JavaScript39"
     },
     {
@@ -1358,10 +1376,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14304,
-        6656
+        21136,
+        35232
       ],
-      "id": "126759cb-4adf-407f-afcc-aa8491cd445e",
+      "id": "8dbb0dff-0fbe-4eab-ad67-556676a73b8d",
       "name": "Execute a SQL query30",
       "credentials": {
         "mySql": {
@@ -1387,10 +1405,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        13968,
-        6656
+        20800,
+        35232
       ],
-      "id": "f593d6a0-f7e1-436e-a580-e20b46db71ea",
+      "id": "ddf412d6-1cd6-4f62-a9cd-8ced716eacf0",
       "name": "HTTP Request23"
     },
     {
@@ -1421,10 +1439,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        14288,
-        6832
+        21120,
+        35408
       ],
-      "id": "be47a403-345a-4dd0-b33f-468494e4f5cd",
+      "id": "efaa4e93-43b1-4877-9c86-db482ba7c3c5",
       "name": "Has Old Messages8"
     },
     {
@@ -1436,10 +1454,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14480,
-        6816
+        21312,
+        35392
       ],
-      "id": "6000c8bf-2391-468b-ba2c-35f9afca5745",
+      "id": "03bb8fe0-e51a-47a1-9498-56373a5f78cb",
       "name": "Execute a SQL query31",
       "credentials": {
         "mySql": {
@@ -1455,10 +1473,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14624,
-        6656
+        21456,
+        35232
       ],
-      "id": "a12e08ff-9e39-44ab-a7d8-0151f00ad86a",
+      "id": "c0e5b09c-d37f-440b-a8f9-6e39027b2f7d",
       "name": "To Router Preparer8"
     },
     {
@@ -1470,10 +1488,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        12544,
-        9328
+        19376,
+        37904
       ],
-      "id": "e8b389ce-8210-4bbb-9336-1e115b906266",
+      "id": "a4849ccd-5c5e-4620-aff3-7546d5f9fd1d",
       "name": "Get webhook4",
       "webhookId": "a2114433-3e96-4ad7-82d5-1bac14ba19b3"
     },
@@ -1486,10 +1504,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        12944,
-        9328
+        19776,
+        37904
       ],
-      "id": "0fd5db98-2f52-4b39-b935-e3ac9241f46c",
+      "id": "76085797-5d72-4c70-8d79-5075368dbac2",
       "name": "Challenge Response4"
     },
     {
@@ -1501,11 +1519,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        12400,
-        9088
+        19232,
+        37664
       ],
       "typeVersion": 1,
-      "id": "41e7ad91-cc7b-4ae7-be14-6c49979b0c20",
+      "id": "b2f86881-401a-41c3-b6d9-345c3b75b7db",
       "name": "Sticky Note42"
     },
     {
@@ -1515,10 +1533,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12800,
-        9152
+        19632,
+        37728
       ],
-      "id": "290c92e3-ccc6-4f32-9d4b-7fe490c109de",
+      "id": "f7d8eb21-6c7e-4ec5-a911-7a701102edbe",
       "name": "Prepare Data to Switch6"
     },
     {
@@ -1669,10 +1687,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        13168,
-        9104
+        20000,
+        37680
       ],
-      "id": "d3ddd387-2a8f-408e-a996-7122501097de",
+      "id": "46e282df-da8b-452f-821e-85f94384fc3e",
       "name": "Switch10"
     },
     {
@@ -1684,10 +1702,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        12576,
-        9152
+        19408,
+        37728
       ],
-      "id": "3f75075a-8093-4f2b-9821-946360c69c10",
+      "id": "3b1ab917-4511-411f-9f71-8162b872d447",
       "name": "Post webhook4",
       "webhookId": "0ea1c427-7152-44cd-82b7-f7375b3ee3ee"
     },
@@ -1698,10 +1716,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        13952,
-        7472
+        20784,
+        36048
       ],
-      "id": "02ca9bcc-ad6c-4625-81a6-9f52545c66f9",
+      "id": "fff3e8e4-68be-4915-895f-16586d9bd386",
       "name": "Message Preparer9"
     },
     {
@@ -1712,11 +1730,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        13904,
-        7232
+        20736,
+        35808
       ],
       "typeVersion": 1,
-      "id": "3125b20d-2c2e-4141-aa03-2839c10a4545",
+      "id": "f989bed5-5295-4d99-8269-ea0a092d0665",
       "name": "Sticky Note43"
     },
     {
@@ -1728,10 +1746,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14112,
-        7472
+        20944,
+        36048
       ],
-      "id": "9443fc63-a082-4c71-8236-dcd659e36e49",
+      "id": "7ca3ad28-b2d0-4c28-87f1-d2e441ba5c13",
       "name": "Execute a SQL query32",
       "credentials": {
         "mySql": {
@@ -1747,10 +1765,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14288,
-        7472
+        21120,
+        36048
       ],
-      "id": "acd94b72-f566-4f8a-b312-9fff3e3ecdcb",
+      "id": "eb6e16dd-438a-4d5c-b6d4-a512b4c03c89",
       "name": "Code in JavaScript40"
     },
     {
@@ -1770,10 +1788,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        13984,
-        7296
+        20816,
+        35872
       ],
-      "id": "c8520051-ec24-41eb-be11-c499de7c3922",
+      "id": "fc823f14-ddd2-4901-822b-804fe4029b53",
       "name": "HTTP Request24"
     },
     {
@@ -1783,10 +1801,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14304,
-        7296
+        21136,
+        35872
       ],
-      "id": "60bdae95-16a3-423c-94b6-01c81aa4969b",
+      "id": "1cd29a86-ddc5-4669-ba92-c93b08f998a2",
       "name": "Code in JavaScript41"
     },
     {
@@ -1798,10 +1816,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14480,
-        7296
+        21312,
+        35872
       ],
-      "id": "70f99c3c-df9e-45d9-9964-c0943a100e67",
+      "id": "9b3d6eea-bcd6-4341-b359-d7462ab802b8",
       "name": "Execute a SQL query33",
       "credentials": {
         "mySql": {
@@ -1827,10 +1845,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        14144,
-        7296
+        20976,
+        35872
       ],
-      "id": "d70faee6-075d-412c-8574-edc1a5d48df6",
+      "id": "52a90fe6-a5ac-48b0-a1f7-2928690f7094",
       "name": "HTTP Request25"
     },
     {
@@ -1861,10 +1879,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        14464,
-        7472
+        21296,
+        36048
       ],
-      "id": "faacc266-be0e-4f65-bbb1-8534707c7743",
+      "id": "6f2afb95-c8e9-4b36-b684-cdff25622404",
       "name": "Has Old Messages9"
     },
     {
@@ -1876,10 +1894,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14656,
-        7456
+        21488,
+        36032
       ],
-      "id": "8e90ad38-e7f6-4089-beb2-573d057d03e4",
+      "id": "b7a2f64e-6576-4f0b-bffd-87b29bbf7209",
       "name": "Execute a SQL query34",
       "credentials": {
         "mySql": {
@@ -1895,10 +1913,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14800,
-        7296
+        21632,
+        35872
       ],
-      "id": "6d9f327a-d127-4184-b2ac-1bed348972db",
+      "id": "17f561be-3db5-41e9-9516-6b19e00a7815",
       "name": "To Router Preparer9"
     },
     {
@@ -1913,10 +1931,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        17424,
-        6272
+        24256,
+        34848
       ],
-      "id": "cb6b10c5-68f0-4ab3-9807-bf71d497c7a1",
+      "id": "dc5a6234-adfa-4d8a-8ac4-91e037b5bbf2",
       "name": "HTTP Request26"
     },
     {
@@ -1928,10 +1946,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        12496,
-        8560
+        19328,
+        37136
       ],
-      "id": "bc2305d2-99d4-42cb-a752-2103d151c8d3",
+      "id": "00fd0bbd-d291-4bde-9459-f0433f7788cc",
       "name": "Get webhook5",
       "webhookId": "06240181-dedb-40d9-b2ea-482f316c3796"
     },
@@ -1944,10 +1962,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        12896,
-        8560
+        19728,
+        37136
       ],
-      "id": "3b297321-d790-4a5e-9e39-2e1e8471ddff",
+      "id": "a17a5385-cb6a-4c43-a7ec-dd6daef27650",
       "name": "Challenge Response5"
     },
     {
@@ -1959,11 +1977,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        12352,
-        8304
+        19184,
+        36880
       ],
       "typeVersion": 1,
-      "id": "5c6eefc6-4339-42fb-90f7-335be626cc52",
+      "id": "016f081e-8f41-41e8-a29d-717ef8244e63",
       "name": "Sticky Note44"
     },
     {
@@ -1973,10 +1991,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12752,
-        8384
+        19584,
+        36960
       ],
-      "id": "03efd195-b327-4826-9a65-19472206bf24",
+      "id": "d4e62032-fb31-4e42-858f-72e02e6b1fbc",
       "name": "Prepare Data to Switch7"
     },
     {
@@ -2127,10 +2145,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        13120,
-        8336
+        19952,
+        36912
       ],
-      "id": "5211aaf0-3bf6-4df9-8917-b87bcf065117",
+      "id": "43f1c359-6beb-4382-bedf-9db4c9d44341",
       "name": "Switch11"
     },
     {
@@ -2142,10 +2160,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        12528,
-        8384
+        19360,
+        36960
       ],
-      "id": "c613f9f6-aca2-4315-9a55-a256db6879f5",
+      "id": "8bae6574-4e29-48a3-b9f5-60ff8b1b440c",
       "name": "Post webhook5",
       "webhookId": "cffefbaf-bfb5-429a-b688-56be6d109935"
     },
@@ -2158,10 +2176,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        17696,
-        6272
+        24528,
+        34848
       ],
-      "id": "fc9772e9-aefd-4ebd-a8f3-badc323ac47c",
+      "id": "9f89f7db-8c0c-4b8b-948a-4ffcd62292c9",
       "name": "Execute a SQL query35",
       "credentials": {
         "mySql": {
@@ -2177,10 +2195,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14144,
-        8544
+        20976,
+        37120
       ],
-      "id": "d7fcaff8-e64d-4f56-8fdc-968dafd5d9b1",
+      "id": "1c9269f0-b676-417b-910e-dcb214e86e53",
       "name": "Message Preparer10"
     },
     {
@@ -2191,11 +2209,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        14096,
-        8304
+        20928,
+        36880
       ],
       "typeVersion": 1,
-      "id": "22ab9d4a-f321-428b-a43f-b22308ff3643",
+      "id": "4fde612e-ab68-4377-b65d-3fe6b3ca79ad",
       "name": "Sticky Note45"
     },
     {
@@ -2207,10 +2225,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14304,
-        8544
+        21136,
+        37120
       ],
-      "id": "35611897-c084-42ff-8061-24f69233bb8c",
+      "id": "f622b563-4b5b-4c4c-a3da-fb8b7d6e15d2",
       "name": "Execute a SQL query36",
       "credentials": {
         "mySql": {
@@ -2226,10 +2244,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14480,
-        8544
+        21312,
+        37120
       ],
-      "id": "cdd6b520-6c8b-46b6-8f17-ceafdc6961e9",
+      "id": "228d9788-b97c-4be4-80ab-182ea43e1022",
       "name": "Code in JavaScript42"
     },
     {
@@ -2249,10 +2267,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        14176,
-        8368
+        21008,
+        36944
       ],
-      "id": "211fdd0e-c893-42a9-a568-95fc64b3184d",
+      "id": "1c94d9b2-e2fb-4edd-80b3-9c4e37e8faf9",
       "name": "HTTP Request27"
     },
     {
@@ -2262,10 +2280,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14496,
-        8368
+        21328,
+        36944
       ],
-      "id": "74e27ddc-fc18-47c5-b8de-9d2deb5aaa97",
+      "id": "80b6ae6a-a91a-49fb-b2c5-82a9056132bf",
       "name": "Code in JavaScript43"
     },
     {
@@ -2277,10 +2295,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14672,
-        8368
+        21504,
+        36944
       ],
-      "id": "d833bbad-8cf6-4c43-ad46-d5bda489f1dc",
+      "id": "1a115fb6-2170-4714-8118-06fa15b31a84",
       "name": "Execute a SQL query37",
       "credentials": {
         "mySql": {
@@ -2306,10 +2324,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        14336,
-        8368
+        21168,
+        36944
       ],
-      "id": "4dba25b1-6ba4-41ed-9f25-d14b8c9b1b61",
+      "id": "cbe67912-8197-44ee-96e6-9b73b02a0ba9",
       "name": "HTTP Request28"
     },
     {
@@ -2340,10 +2358,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        14656,
-        8544
+        21488,
+        37120
       ],
-      "id": "09d64ed3-2467-4e30-b6e6-23e6c58881ba",
+      "id": "ba7b0cd0-b9c4-47a3-b818-6c350e719586",
       "name": "Has Old Messages10"
     },
     {
@@ -2355,10 +2373,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14848,
-        8528
+        21680,
+        37104
       ],
-      "id": "f28fcd94-5804-4204-8611-60cf7d16d1b2",
+      "id": "fae5b75d-c40c-4ab4-8d4b-81499a10c6e4",
       "name": "Execute a SQL query38",
       "credentials": {
         "mySql": {
@@ -2374,10 +2392,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14992,
-        8368
+        21824,
+        36944
       ],
-      "id": "59cc9c36-b796-46b1-984f-a71ab2ac82d8",
+      "id": "25ed5876-f5c3-40ef-855f-ecc8c6141256",
       "name": "To Router Preparer10"
     },
     {
@@ -2388,11 +2406,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        14096,
-        7728
+        20928,
+        36304
       ],
       "typeVersion": 1,
-      "id": "9692d884-d020-4392-af4f-ae068d263c4e",
+      "id": "35ec1c44-155c-418a-98c7-2538fe00b432",
       "name": "Sticky Note46"
     },
     {
@@ -2402,10 +2420,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14176,
-        7920
+        21008,
+        36496
       ],
-      "id": "68992c3a-9cb3-4a54-9f73-994137783b51",
+      "id": "db72ca2f-9b4e-413c-ac1b-6dede8b4d905",
       "name": "Message Preparer11"
     },
     {
@@ -2417,10 +2435,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14432,
-        7920
+        21264,
+        36496
       ],
-      "id": "3c85c8a6-8da6-46df-bbfa-f14e5ea0f224",
+      "id": "e0fbe95f-6944-4c40-afd3-75b9ab8f20a9",
       "name": "Execute a SQL query39",
       "credentials": {
         "mySql": {
@@ -2436,10 +2454,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12048,
-        5936
+        18880,
+        34512
       ],
-      "id": "b7f7d5c5-5159-4c10-b97e-bea5fda376d8",
+      "id": "962e358e-b4d6-4f2f-b43a-44bfa5ebf83d",
       "name": "Code in JavaScript44"
     },
     {
@@ -2459,10 +2477,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        11744,
-        5760
+        18576,
+        34336
       ],
-      "id": "b16b88c3-f871-4e61-b8e6-6cf5a149c9bd",
+      "id": "0ca225c4-e679-4d48-bc0d-67564f330d63",
       "name": "HTTP Request29"
     },
     {
@@ -2472,10 +2490,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        11984,
-        5760
+        18816,
+        34336
       ],
-      "id": "821242ec-5fda-4e0b-8079-68de0bcac370",
+      "id": "f69af4c4-1c9d-4b0e-800e-a75dd464f4e2",
       "name": "Code in JavaScript45"
     },
     {
@@ -2487,10 +2505,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        12240,
-        5760
+        19072,
+        34336
       ],
-      "id": "5def5504-69e2-4c63-8add-a50a4642f014",
+      "id": "c9d2e968-1996-4ceb-bb44-2e9b4172fbc0",
       "name": "Execute a SQL query40",
       "credentials": {
         "mySql": {
@@ -2527,10 +2545,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        12224,
-        5936
+        19056,
+        34512
       ],
-      "id": "5eacbb9e-9a98-4227-b2e2-2d091af5544e",
+      "id": "701df053-1d70-4410-a3ef-27ddfc76fead",
       "name": "Has Old Messages11"
     },
     {
@@ -2542,10 +2560,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        12416,
-        5920
+        19248,
+        34496
       ],
-      "id": "0f500a7a-eb66-4151-9a65-f360458356aa",
+      "id": "f9a77355-b3b0-4559-aab0-ee73016ff8bb",
       "name": "Execute a SQL query41",
       "credentials": {
         "mySql": {
@@ -2561,10 +2579,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12560,
-        5760
+        19392,
+        34336
       ],
-      "id": "438351a3-22b6-4ee5-8aed-7ee2d967932f",
+      "id": "6c220777-e4f2-4fbb-a79a-bc7c1ff12404",
       "name": "To Router Preparer11"
     },
     {
@@ -2575,11 +2593,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        11632,
-        5712
+        18464,
+        34288
       ],
       "typeVersion": 1,
-      "id": "d322da95-c826-4e42-88ce-095473abb65d",
+      "id": "c8929670-1631-4c4c-abf1-87a23b3116cd",
       "name": "Sticky Note47"
     },
     {
@@ -2591,10 +2609,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        11872,
-        5936
+        18704,
+        34512
       ],
-      "id": "a8f7405d-a45a-4b26-a974-aba9e83a91e8",
+      "id": "95ace5ee-3b8c-4cb5-9870-4b83b9641f33",
       "name": "insert comments to facebook_post_comments1",
       "credentials": {
         "mySql": {
@@ -2610,10 +2628,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        11712,
-        5936
+        18544,
+        34512
       ],
-      "id": "38838557-dac4-41a5-a02a-2caef9846487",
+      "id": "da460d77-9181-4e93-9885-65a3ada9214a",
       "name": "Comment Preparer1"
     },
     {
@@ -2622,13 +2640,13 @@
         "path": "86b34f20-760e-42fd-b15e-e4ebc3b4a4dd",
         "options": {}
       },
-      "id": "c9ce24d0-5399-4850-a044-92583d93ba5b",
+      "id": "bdb368bd-c6bb-47b3-8960-ca4fcb5f6a11",
       "name": "STT Webhook1",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        13152,
-        6368
+        19984,
+        34944
       ],
       "webhookId": "86b34f20-760e-42fd-b15e-e4ebc3b4a4dd"
     },
@@ -2644,10 +2662,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        12912,
-        6368
+        19744,
+        34944
       ],
-      "id": "0f0c14d8-2776-4260-80d9-41cbe06d8060",
+      "id": "671541fc-fa85-4425-80d8-71c227ecebbb",
       "name": "HTTP Request31"
     },
     {
@@ -2659,10 +2677,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        12400,
-        6912
+        19232,
+        35488
       ],
-      "id": "f45e8eba-b771-4ac7-b915-a0bab4af85ba",
+      "id": "456282ad-0f3b-4f14-993e-76517fdf286a",
       "name": "Get webhook",
       "webhookId": "3626c185-0fbb-4287-9eb6-41ebaa5ac524"
     },
@@ -2675,10 +2693,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        12688,
-        6912
+        19520,
+        35488
       ],
-      "id": "086c0be8-9f03-49e6-849b-7daaf2c88110",
+      "id": "0427b6a1-9957-41bb-8449-359c49be342b",
       "name": "Challenge Response"
     },
     {
@@ -2690,10 +2708,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        16480,
-        6240
+        23312,
+        34816
       ],
-      "id": "b13db77b-8d77-43d0-96ca-76c3521983ef",
+      "id": "cbdeda8c-8d69-4423-9a20-72bc73e44eaa",
       "name": "Reply To Facebook Comments Qurey",
       "credentials": {
         "mySql": {
@@ -2710,11 +2728,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        16352,
-        6032
+        23184,
+        34608
       ],
       "typeVersion": 1,
-      "id": "4bd91e9e-b060-4263-9e70-38fa4c8efca8",
+      "id": "14ca5ad0-8fd6-4a52-9e7d-f0a1654295b7",
       "name": "Sticky Note"
     },
     {
@@ -2738,10 +2756,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        16736,
-        6224
+        23568,
+        34800
       ],
-      "id": "883a0a58-6216-4721-bce0-ee6bdc6f332e",
+      "id": "8067587c-f386-42c6-b2c8-52dbcf15db4a",
       "name": "HTTP Request"
     },
     {
@@ -2752,11 +2770,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        17248,
-        6064
+        24080,
+        34640
       ],
       "typeVersion": 1,
-      "id": "86d677bb-3282-4024-a7b2-8cf827a3be51",
+      "id": "e050dc3c-3cac-4fc9-a380-29bfe4d47c54",
       "name": "Sticky Note48"
     },
     {
@@ -2767,11 +2785,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        17264,
-        5504
+        24096,
+        34080
       ],
       "typeVersion": 1,
-      "id": "1c1f8a1d-3034-4896-9083-b6c3c20945ea",
+      "id": "a66e6157-1c03-4289-911d-e2876d70c516",
       "name": "Sticky Note1"
     },
     {
@@ -2782,11 +2800,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        13904,
-        9088
+        20736,
+        37664
       ],
       "typeVersion": 1,
-      "id": "d083e339-4f9f-4bb0-a0db-340d6fff97db",
+      "id": "c99b42dd-00b4-4c66-a11e-75e80d7ddba9",
       "name": "Sticky Note49"
     },
     {
@@ -2800,10 +2818,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14112,
-        9328
+        20944,
+        37904
       ],
-      "id": "f730a8b9-408e-48ec-bca0-30fc18f88b9a",
+      "id": "ee19c014-dc65-43a9-9ed0-dbf3fa981e8f",
       "name": "Execute a SQL query",
       "credentials": {
         "mySql": {
@@ -2819,10 +2837,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14240,
-        9328
+        21072,
+        37904
       ],
-      "id": "6f700069-1e0f-44b1-852c-e7a1992e5ba2",
+      "id": "c24125bf-aa30-4355-82d4-6fef41c58499",
       "name": "Code in JavaScript"
     },
     {
@@ -2842,10 +2860,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        13984,
-        9152
+        20816,
+        37728
       ],
-      "id": "2efb7bc7-9c32-4fea-9c22-754b3dc69bbd",
+      "id": "3c7921df-5da6-430b-8d14-52ffa97b54de",
       "name": "HTTP Request30"
     },
     {
@@ -2855,10 +2873,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14304,
-        9152
+        21136,
+        37728
       ],
-      "id": "396a9507-fe7a-409d-9f26-62209fb1d193",
+      "id": "d3b223a5-46d7-4e95-b145-816b42d5b43c",
       "name": "Code in JavaScript46"
     },
     {
@@ -2870,10 +2888,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14480,
-        9152
+        21312,
+        37728
       ],
-      "id": "0c7b463a-eb91-4b10-8250-6e2b5c3a20b0",
+      "id": "061d51e1-03b8-42bf-84e1-ac52a8ce192c",
       "name": "Execute a SQL query42",
       "credentials": {
         "mySql": {
@@ -2910,10 +2928,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        14480,
-        9328
+        21312,
+        37904
       ],
-      "id": "94ff7f69-eafa-4eed-a5ab-86e29deae044",
+      "id": "31993b89-dbfe-42b7-b3b0-6cc8fde30871",
       "name": "Has Old Messages"
     },
     {
@@ -2925,10 +2943,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14688,
-        9328
+        21520,
+        37904
       ],
-      "id": "29474dab-3cdf-44cc-bc8f-9a4fbbcb42dd",
+      "id": "c9b274e4-6f6f-48c5-bcd7-1fe8d95746af",
       "name": "Execute a SQL query43",
       "credentials": {
         "mySql": {
@@ -2944,10 +2962,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14800,
-        9152
+        21632,
+        37728
       ],
-      "id": "4f53c698-04fb-4509-bc91-a54baa85df52",
+      "id": "de712df8-f17b-424b-bd9b-0184696089b7",
       "name": "To Router Preparer"
     },
     {
@@ -2967,10 +2985,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        14144,
-        9152
+        20976,
+        37728
       ],
-      "id": "710e4951-4ba3-44a8-9bb8-6ee5089debe6",
+      "id": "b254c307-7aad-4076-a1ef-3f26ce4ce97c",
       "name": "HTTP Request32"
     },
     {
@@ -2980,10 +2998,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        13952,
-        9328
+        20784,
+        37904
       ],
-      "id": "f589c5c9-8f10-4e89-a327-fd0f0c179a74",
+      "id": "b4d04d81-9be4-4cd1-8ea4-60cfd5aecf7b",
       "name": "Whatsapp Message Preparer"
     },
     {
@@ -3007,10 +3025,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        16960,
-        6752
+        23792,
+        35328
       ],
-      "id": "26d83913-1dd1-4885-acb2-ab410c80ad6b",
+      "id": "d05a9e05-cac6-4076-8dd5-cf747ca9ea04",
       "name": "HTTP Request33"
     },
     {
@@ -3021,11 +3039,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        16368,
-        6560
+        23200,
+        35136
       ],
       "typeVersion": 1,
-      "id": "53cf3dcd-bed3-491c-8dcf-c1d92a828b80",
+      "id": "c3de829d-16fc-4f07-9f79-49716dfc26f0",
       "name": "Sticky Note2"
     },
     {
@@ -3037,21 +3055,17 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        14688,
-        5488
+        21520,
+        34064
       ],
       "typeVersion": 1,
-      "id": "7f8175de-2651-4e85-b257-f3daca2709c2",
+      "id": "fa034906-bfbe-48d3-8e2d-90ad4b876358",
       "name": "Sticky Note33"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://n8n-helper.afro-tech.net/social-media/chat/completions",
-        "sendBody": true,
-        "specifyBody": "json",
-        "options": {},
-        "jsonBody": "{\"messages\":[{\"role\":\"user\",\"content\":\"={{ $('Smart Router Input1').first().json.query }}\"}]}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -3060,15 +3074,19 @@
               "value": "={{ $('Smart Router Input1').first().json.source + ',' + $('Smart Router Input1').first().json.sessionId }}"
             }
           ]
-        }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"messages\":[{\"role\":\"user\",\"content\":\"={{ $('Smart Router Input1').first().json.query }}\"}]}",
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        15024,
-        5616
+        21856,
+        34192
       ],
-      "id": "2dc4e827-647b-42a0-a176-497d884e48d5",
+      "id": "fdaebbb1-b26a-41a0-b2b0-182a8cb6c7b6",
       "name": "HTTP Request1"
     },
     {
@@ -3080,10 +3098,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        12576,
-        9968
+        19408,
+        38544
       ],
-      "id": "5a91c112-428f-4459-9d01-593ac32ed9b5",
+      "id": "7bce4343-2a9a-46cf-b013-2bda08f45510",
       "name": "Get webhook6",
       "webhookId": "a32b3eef-2963-4c30-8e13-bb49ff1f095b"
     },
@@ -3096,10 +3114,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        12976,
-        9968
+        19808,
+        38544
       ],
-      "id": "f30f3bd0-fa45-4937-bbdd-f6945e300a43",
+      "id": "8d006319-7fac-4fea-a556-2e1eb21f8936",
       "name": "Challenge Response6"
     },
     {
@@ -3111,11 +3129,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        12352,
-        9712
+        19184,
+        38288
       ],
       "typeVersion": 1,
-      "id": "bffc7560-ac1a-452b-ac31-6d3b9685e818",
+      "id": "76f15cfd-1668-4d48-b50b-23e36cf65030",
       "name": "Sticky Note51"
     },
     {
@@ -3125,10 +3143,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12816,
-        9824
+        19648,
+        38400
       ],
-      "id": "55afdb46-0e60-4535-ba24-3d4b79304edc",
+      "id": "3a95b711-8c17-4442-90ad-d5eba9431af2",
       "name": "Prepare Data to Switch"
     },
     {
@@ -3279,10 +3297,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        13200,
-        9760
+        20032,
+        38336
       ],
-      "id": "1de4ce06-e5d1-4dbd-8e41-dff6e82a8d08",
+      "id": "e2a88e38-1630-4112-ae90-2d0b28aa1947",
       "name": "Switch"
     },
     {
@@ -3295,10 +3313,10 @@
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.2,
       "position": [
-        12592,
-        9824
+        19424,
+        38400
       ],
-      "id": "8ef1e32a-2ed3-4611-94eb-6a9362258827",
+      "id": "facd021b-4a52-47e9-8233-cb5c2207c162",
       "name": "Telegram Trigger",
       "webhookId": "fa1f009f-78ec-4c77-ad7f-798c2222dfab",
       "credentials": {
@@ -3317,10 +3335,10 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        17392,
-        6864
+        24224,
+        35440
       ],
-      "id": "2853cc90-09a5-44d1-a012-f03825334807",
+      "id": "c71f7a1f-1ddb-44d2-b1c9-915963bc93fc",
       "name": "Send a text message",
       "webhookId": "ce9234bd-b8cf-454c-8317-919bb26cbfe4",
       "credentials": {
@@ -3338,11 +3356,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        17280,
-        6656
+        24112,
+        35232
       ],
       "typeVersion": 1,
-      "id": "7738225c-16d5-4ef7-a7e9-5491316e79d1",
+      "id": "b34bf697-68b4-4ae6-b9f0-6fe0d186e6d8",
       "name": "Sticky Note52"
     },
     {
@@ -3352,10 +3370,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        13920,
-        9744
+        20752,
+        38320
       ],
-      "id": "8bc34c9c-5476-4872-8278-bfec260d9b0c",
+      "id": "8de709b4-db39-4d64-9a88-307d62374193",
       "name": "Message Preparer"
     },
     {
@@ -3367,10 +3385,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        13936,
-        9968
+        20768,
+        38544
       ],
-      "id": "5ddbcbed-773d-48ba-85a5-ffb6d0a26e3b",
+      "id": "446264ef-0d85-434a-9b53-ed51a36f551c",
       "name": "Execute a SQL query44",
       "credentials": {
         "mySql": {
@@ -3386,10 +3404,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14112,
-        9904
+        20944,
+        38480
       ],
-      "id": "5d6667b9-c46e-42f7-b7ae-d7c77a39915b",
+      "id": "6430ee4c-6692-4dbf-b24b-4ca751adee51",
       "name": "Code in JavaScript48"
     },
     {
@@ -3401,10 +3419,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14320,
-        9936
+        21152,
+        38512
       ],
-      "id": "507593c1-f92d-4690-bfce-231727b16118",
+      "id": "34bf9899-8e62-4c44-82b0-109d719901f8",
       "name": "Execute a SQL query45",
       "credentials": {
         "mySql": {
@@ -3441,10 +3459,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        14144,
-        9760
+        20976,
+        38336
       ],
-      "id": "ca20abc1-92ca-4c79-aa34-566f51a775b8",
+      "id": "45df3845-6c0b-466e-a6bc-03854f65a909",
       "name": "Has Old Messages12"
     },
     {
@@ -3456,10 +3474,10 @@
       "type": "n8n-nodes-base.mySql",
       "typeVersion": 2.5,
       "position": [
-        14336,
-        9744
+        21168,
+        38320
       ],
-      "id": "ab4a1006-0879-42fd-9c9b-a6e6028cc01c",
+      "id": "a7efaf6b-9511-4e62-b949-ae494e113d83",
       "name": "Execute a SQL query46",
       "credentials": {
         "mySql": {
@@ -3475,10 +3493,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14544,
-        9856
+        21376,
+        38432
       ],
-      "id": "5034ee0d-2512-4849-b831-5138b25aad8d",
+      "id": "7ef08538-9ac5-46c1-9644-351d4f86eda0",
       "name": "To Router Preparer12"
     },
     {
@@ -3490,11 +3508,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        12416,
-        10288
+        19248,
+        38864
       ],
       "typeVersion": 1,
-      "id": "a6df1219-21b2-4d56-8151-ebc9ae25b798",
+      "id": "31628da4-997e-4fb2-a48b-c9c6954a8793",
       "name": "Sticky Note53"
     },
     {
@@ -3504,10 +3522,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12848,
-        10400
+        19680,
+        38976
       ],
-      "id": "0a0cbde3-5983-4cda-a60a-828a5cebfdbe",
+      "id": "d5c1f55c-110c-48a4-8a53-6d239eeb83b1",
       "name": "Prepare Data to Switch1"
     },
     {
@@ -3658,10 +3676,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        13232,
-        10336
+        20064,
+        38912
       ],
-      "id": "e93e9271-9d1c-4fe1-9f60-b85aec42603c",
+      "id": "2973c6f2-b8ed-459c-bd87-8f8ba42c7881",
       "name": "Switch1"
     },
     {
@@ -3673,10 +3691,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        12560,
-        10544
+        19392,
+        39120
       ],
-      "id": "198314e2-6941-4697-997f-221cb46df4c4",
+      "id": "306fb364-863b-4639-bc51-56d36985aba6",
       "name": "Get webhook7",
       "webhookId": "56bae59f-790d-4a49-b877-bfc45d3d86e8"
     },
@@ -3687,10 +3705,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12544,
-        10432
+        19376,
+        39008
       ],
-      "id": "525dc603-5596-4cf6-8e7e-8ef12fe67328",
+      "id": "8e8ed904-6aee-43df-bf46-832e6c37aad9",
       "name": "Code in JavaScript2"
     },
     {
@@ -3700,10 +3718,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12960,
-        10528
+        19792,
+        39104
       ],
-      "id": "4a24c294-7b9f-4306-920a-9617271cc76b",
+      "id": "42eafe72-b960-4a7a-848b-2711227b2dc5",
       "name": "Code in JavaScript3"
     },
     {
@@ -3713,11 +3731,32 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        12800,
-        6080
+        19632,
+        34656
       ],
-      "id": "8f36dee1-99eb-40d7-bd3d-569c45101994",
+      "id": "91a6ce47-d6d6-4f92-af34-569ad8e4bb1d",
       "name": "To Router Preparer13"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.id, c.facebook_conversation_id, c.lead_id INTO @conversation_id, @fb_conv_id, @lead_id\nFROM facebook_conversations c\nJOIN crm_lead_social_profiles p ON p.crm_lead_id = c.lead_id\nWHERE p.platform = 'facebook' AND p.platform_user_id = '{{ $('Message Preparer6').first().json.sessionId }}'\nORDER BY c.id DESC LIMIT 1;\n\nINSERT INTO facebook_messages(facebook_message_id, facebook_conversation_id, conversation_id, lead_id, sender, message_text, reply_to_message_id, created_time)\nVALUES ('{{ $json.message_id }}', @fb_conv_id, @conversation_id, @lead_id, 'agent', '{{ $('HTTP Request1').first().json.toString() }}', NULL, NOW());",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        24912,
+        34256
+      ],
+      "id": "8e844734-6816-4967-99cd-8dfeaa6ac184",
+      "name": "Execute a SQL query47",
+      "credentials": {
+        "mySql": {
+          "id": "mV8XlX23k3eXomiW",
+          "name": "MySQL account"
+        }
+      }
     },
     {
       "parameters": {
@@ -3731,11 +3770,11 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        18400,
-        5680
+        25232,
+        34256
       ],
-      "id": "crm-process-message-node-001",
-      "name": "CRM Process Message"
+      "id": "f89191da-f7e9-42cd-9d4e-2ae5857a1289",
+      "name": "CRM Process Message1"
     }
   ],
   "pinData": {},
@@ -3756,12 +3795,12 @@
       "main": [
         [
           {
-            "node": "Execute a SQL query25",
+            "node": "Execute a SQL query47",
             "type": "main",
             "index": 0
           },
           {
-            "node": "CRM Process Message",
+            "node": "CRM Process Message1",
             "type": "main",
             "index": 0
           }
@@ -4816,11 +4855,6 @@
         ]
       ]
     },
-    "Execute a SQL query42": {
-      "main": [
-        []
-      ]
-    },
     "Has Old Messages": {
       "main": [
         [
@@ -5074,7 +5108,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "2f461999-8b42-4963-8340-d847df330a65",
+  "versionId": "2a2f9f3b-856c-49eb-82c1-7dc5f45c33c0",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "bcf6f7d16a28a7df9a238c69d5179feeddf3dc51ff62cdb52f4f559790eb2b7c"

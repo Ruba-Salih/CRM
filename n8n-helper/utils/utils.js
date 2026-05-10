@@ -3,7 +3,12 @@ const { v4: uuid } = require("uuid");
 
 async function query(q, params = []) {
     try {
-        const [rows] = await pool.execute(q, params);
+        const db = require("../db");
+        if (!db || !db.pool) {
+            console.error("Database Pool is not initialized!");
+            return null;
+        }
+        const [rows] = await db.pool.execute(q, params);
         return rows;
     } catch (err) {
         console.error("Database Query Error:", err);
@@ -40,11 +45,11 @@ async function sendToAi(data){
 
 
 async function getResponse(messages,platform_source,platform_user_id){
-    let message = messages.at(-1)
+    let message = messages[messages.length - 1]
     
     
     // adding previous messages in query for classifier
-    if(messages.at(-1).content.includes('classifier for user question')){
+    if(messages[messages.length - 1].content.includes('classifier for user question')){
         if(messages.length == 1)
             message.content = `${message.content}
         
@@ -55,24 +60,24 @@ async function getResponse(messages,platform_source,platform_user_id){
             message.content = `${message.content}
         
         Last Customer Question before this Question is
-        ((( ${messages.at(-3).content} )))
+        ((( ${messages[messages.length - 3].content} )))
         
         and you answered by this:
-        ((( ${messages.at(-2).content} )))
+        ((( ${messages[messages.length - 2].content} )))
         `
         
         if(messages.length>4)
             message.content = `${message.content}
         
         and the Customer Question before even that Question is
-        ((( ${messages.filter(message=>message.role=='user').at(-3).content} )))
+        ((( ${messages.filter(message=>message.role=='user')[messages.filter(message=>message.role=='user').length - 3].content} )))
         `
         
         if(messages.length>6)
             message.content = `${message.content}
         
         and the Customer Question before even above Question is
-        ((( ${messages.filter(message=>message.role=='user').at(-4).content} )))
+        ((( ${messages.filter(message=>message.role=='user')[messages.filter(message=>message.role=='user').length - 4].content} )))
         `
     }
     
@@ -87,13 +92,14 @@ async function getResponse(messages,platform_source,platform_user_id){
             [platform_user_id]
         )
 
-        var social_profile = (await query(
+        var profiles = await query(
             `select * from crm_lead_social_profiles 
              where platform = 'facebook' and platform_user_id=?`,
             [platform_user_id]
-        ))[0]
+        )
+        var social_profile = profiles ? profiles[0] : null;
 
-        if(last_messages.length == 0)
+        if(!last_messages || last_messages.length == 0)
             message.content = `${message.content}
         
 
@@ -153,7 +159,7 @@ async function getResponse(messages,platform_source,platform_user_id){
     var data = {
       messages:[message],
       temperature: 0,
-      max_tokens: (messages.at(-1).content.includes("LOCATION_DESCRIPTION") ? 2048 : 8192),
+      max_tokens: (messages[messages.length - 1].content.includes("LOCATION_DESCRIPTION") ? 2048 : 8192),
    //   repeat_penalty: 1.1
     } 
     
