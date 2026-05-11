@@ -1,20 +1,22 @@
-const { pool } = require("../db");
+const { con } = require("../db");
 const { v4: uuid } = require("uuid");
 
-async function query(q, params = []) {
-    try {
-        const db = require("../db");
-        if (!db || !db.pool) {
-            console.error("Database Pool is not initialized!");
-            return null;
+function query(q, params = []) {
+    return new Promise((resolve) => {
+        if (!con) {
+            console.error("Database connection 'con' is not initialized!");
+            return resolve(null);
         }
-        const [rows] = await db.pool.execute(q, params);
-        return rows;
-    } catch (err) {
-        console.error("Database Query Error:", err);
-        console.error("Query:", q);
-        return null;
-    }
+        
+        con.query(q, params, (err, result) => {
+            if (err) {
+                console.error("Database Query Error:", err);
+                console.error("Query:", q);
+                return resolve(null); // Return null instead of crashing
+            }
+            resolve(result);
+        });
+    });
 }
 
 async function sendToAi(data){
@@ -86,8 +88,7 @@ async function getResponse(messages,platform_source,platform_user_id){
     else if(platform_source == 'messenger'){
         var last_messages = await query(
             `select * from facebook_messages 
-             where conversation_id in 
-                   (select id from facebook_conversations where facebook_user_id=?) 
+             where lead_id = (select crm_lead_id from crm_lead_social_profiles where platform='facebook' and platform_user_id=? LIMIT 1) 
              order by id desc limit 4 offset 1`,
             [platform_user_id]
         )
@@ -121,8 +122,7 @@ async function getResponse(messages,platform_source,platform_user_id){
     }else if(platform_source == 'instagram_messages'){
         var last_messages = await query(
             `select * from instagram_messages 
-             where conversation_id in 
-                   (select id from instagram_conversations where instagram_user_id=?) 
+             where lead_id = (select crm_lead_id from crm_lead_social_profiles where platform='instagram' and platform_user_id=? LIMIT 1) 
              order by id desc limit 4 offset 1`,
             [platform_user_id]
         )

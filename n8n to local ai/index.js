@@ -43,14 +43,14 @@ socket.on("request_to_ai", async (data) => {
     const { requestId, ...ollamaData } = data;
 
     // 2. إضافة اسم الموديل (تأكد أن هذا الموديل محمل عندك في Ollama)
-    ollamaData.model = "qwen2.5:7b";
+    ollamaData.model = "qwen2.5:7b"
 
     // 3. إرسال الطلب
     console.log("🤖 Calling Ollama...");
     const qwenRes = await axios.post("http://localhost:11434/v1/chat/completions", ollamaData);
 
-    // الرد الكامل الذي يدعمه LangChain في n8n موجود داخل .data حصراً
-    const answer = qwenRes.data;
+    // استخراج النص فقط من الرد
+    const answer = qwenRes.data.choices[0].message.content;
     
     // سنطبع الرد الكامل (بدون أخطاء دائرية)
     console.log("✅ Full AI Response Data:", JSON.stringify(answer, null, 2));

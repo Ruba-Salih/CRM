@@ -1,4 +1,4 @@
-const { pool } = require("../db");
+const { query } = require("../utils/utils");
 
 /**
  * Resolves a base COURSES code to the correct tier:
@@ -19,7 +19,7 @@ async function resolveTicketCode(baseCode, courseName) {
         const normalizedInput = courseName.replace(/[\s-]/g, '').toLowerCase();
         const DB_ATC = 'test4_atc'; // Courses are in test4_atc (migrated from system_atc)
         
-        const [rows] = await pool.query(`
+        const rows = await query(`
             SELECT 
                 c.id,
                 (
@@ -50,38 +50,38 @@ async function resolveTicketCode(baseCode, courseName) {
 
 async function getHistoricalBaseline(leadId) {
     try {
-        const [allTkts] = await pool.query(`SELECT id, closed, sales_level_id FROM crm_tickets WHERE crm_lead_id = ?`, [leadId]);
-        if (allTkts.length === 0) return 0;
+        const allTkts = await query(`SELECT id, closed, sales_level_id FROM crm_tickets WHERE crm_lead_id = ?`, [leadId]);
+        if (!allTkts || allTkts.length === 0) return 0;
 
         const tIds = allTkts.map(t => t.id);
         const tPH  = tIds.map(() => '?').join(',');
 
-        const [soldLevels] = await pool.query(`SELECT id FROM crm_sales_ticket_levels WHERE code IN ('SOLD','POST_SALE','COMPLETED')`);
-        if (soldLevels.length > 0) {
+        const soldLevels = await query(`SELECT id FROM crm_sales_ticket_levels WHERE code IN ('SOLD','POST_SALE','COMPLETED')`);
+        if (soldLevels && soldLevels.length > 0) {
             const lvIds = soldLevels.map(r => r.id);
             const salesCount = allTkts.filter(t => t.closed === 1 && lvIds.includes(t.sales_level_id)).length;
             if (salesCount >= 3) return 60;
             if (salesCount >= 1) return 40;
         }
 
-        const [preSaleRow] = await pool.query(`SELECT id FROM crm_sales_ticket_levels WHERE code = 'PRE_SALE' LIMIT 1`);
-        const preSaleId = preSaleRow.length > 0 ? preSaleRow[0].id : null;
+        const preSaleRow = await query(`SELECT id FROM crm_sales_ticket_levels WHERE code = 'PRE_SALE' LIMIT 1`);
+        const preSaleId = preSaleRow && preSaleRow.length > 0 ? preSaleRow[0].id : null;
         const closedNoSale = allTkts.filter(t => t.closed === 1 && (!t.sales_level_id || t.sales_level_id === preSaleId)).length;
         if (closedNoSale >= 5) return -30;
 
-        const [refunds] = await pool.query(
+        const refunds = await query(
             `SELECT COUNT(*) as cnt FROM crm_ticket_messages WHERE crm_ticket_id IN (${tPH}) AND message_text LIKE ?`,
             [...tIds, '%استرداد%']
         );
-        if (refunds[0].cnt > 0) return -50;
+        if (refunds && refunds[0] && refunds[0].cnt > 0) return -50;
 
         const recentIds = tIds.slice(-3);
         const rPH = recentIds.map(() => '?').join(',');
-        const [discMsgs] = await pool.query(
+        const discMsgs = await query(
             `SELECT COUNT(*) as cnt FROM crm_ticket_messages WHERE crm_ticket_id IN (${rPH}) AND message_text LIKE ?`,
             [...recentIds, '%خصم%']
         );
-        if (discMsgs[0].cnt >= 2) return -15;
+        if (discMsgs && discMsgs[0] && discMsgs[0].cnt >= 2) return -15;
 
         return 0;
     } catch (e) {
@@ -92,11 +92,11 @@ async function getHistoricalBaseline(leadId) {
 
 async function getTimingScore(leadId, intentScore) {
     try {
-        const [rows] = await pool.query(
+        const rows = await query(
             `SELECT TIMESTAMPDIFF(MINUTE, last_interaction_time, NOW()) as mins_since FROM crm_leads WHERE id = ?`,
             [leadId]
         );
-        if (!rows[0] || rows[0].mins_since === null) return 0;
+        if (!rows || !rows[0] || rows[0].mins_since === null) return 0;
         const mins = rows[0].mins_since;
         const isBuyingIntent = intentScore >= 25;
 

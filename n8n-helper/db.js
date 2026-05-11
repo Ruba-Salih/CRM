@@ -1,18 +1,21 @@
-const mysql = require('mysql2/promise');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+var mysql = require('mysql');
 const path = require("path");
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+require('dotenv').config({path: path.resolve(__dirname, '../.env') });
 
-const pool = mysql.createPool({
+var con = mysql.createConnection({
     host: "127.0.0.1",
     user: "root",
     password: "smartnodefirstaicompanyinsudan",
     database: "test4_atc",
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    // socketPath: '/var/run/mysqld/mysqld.sock' // Keep if needed on Linux, but usually 127.0.0.1 works
+    socketPath: '/var/run/mysqld/mysqld.sock'
 });
 
-console.log("ATC Database Pool Created!");
+con.connect(function(err) {
+    if (err) console.error("ATC Connection Error:", err);
+    else console.log("ATC Connected via Old MySQL!");
+});
 
-module.exports = { pool };
+module.exports = {con};
+
